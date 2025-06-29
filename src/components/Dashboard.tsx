@@ -20,7 +20,7 @@ export function Dashboard() {
   const { data: userTotals, isLoading: usersLoading } = useQuery({
     queryKey: ['user-totals'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('total_by_user');
+      const { data, error } = await supabase.rpc('total_by_user', {});
       if (error) throw error;
       return data as UserTotal[];
     },

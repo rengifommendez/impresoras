@@ -63,7 +63,7 @@ export function UsersSection() {
 
       // Luego obtener totales por usuario usando la función RPC
       const { data: userTotals, error: totalsError } = await supabase
-        .rpc('total_by_user');
+        .rpc('total_by_user', {});
       
       if (totalsError) {
         console.warn('Error getting user totals:', totalsError);
