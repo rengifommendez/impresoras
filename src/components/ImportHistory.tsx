@@ -14,7 +14,8 @@ import {
   TrendingUp,
   BarChart3,
   Eye,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -56,17 +57,14 @@ export function ImportHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('import_log')
-        .select(`
-          *,
-          importer:imported_by(email)
-        `)
+        .select('*')
         .order('imported_at', { ascending: false });
       
       if (error) throw error;
       
       return data.map(item => ({
         ...item,
-        importer_email: item.importer?.email || 'Sistema'
+        importer_email: 'Sistema' // Since we can't join with auth.users, we'll show 'Sistema' for all
       })) as ImportLogEntry[];
     },
   });
