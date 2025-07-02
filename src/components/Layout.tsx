@@ -1,6 +1,7 @@
 import React from 'react';
 import { LogOut, Printer, BarChart3, Upload, Users, FileText, Settings, Monitor, Database, Target, Building } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import SEDCAUCALogo from '../img/SEDCAUCA.png';
 
 interface LayoutProps {
   children: React.ReactNode;
