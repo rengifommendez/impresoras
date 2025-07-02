@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Printer, Eye, EyeOff, LogIn, UserPlus, AlertCircle, Shield, User } from 'lucide-react';
+import { Printer, Eye, EyeOff, LogIn, UserPlus, AlertCircle, Shield, User, Mail, Building, Users as UsersIcon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [office, setOffice] = useState('');
+  const [department, setDepartment] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,12 +21,17 @@ export function LoginForm() {
     e.preventDefault();
     
     if (!email || !password) {
-      setError('Por favor, complete todos los campos');
+      setError('Por favor, complete todos los campos obligatorios');
       return;
     }
 
     if (isRegistering && !fullName) {
       setError('Por favor, ingrese su nombre completo');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
@@ -36,15 +43,23 @@ export function LoginForm() {
       if (isRegistering) {
         const { error } = await signUp(email, password, {
           full_name: fullName,
-          role: role // Usar el rol seleccionado
+          role: role,
+          office: office || '',
+          department: department || ''
         });
         
         if (error) {
-          setError(error.message);
+          if (error.message.includes('already registered')) {
+            setError('Este email ya está registrado. Intente iniciar sesión o use otro email.');
+          } else {
+            setError(error.message);
+          }
         } else {
-          setSuccess(`✅ Cuenta ${role === 'admin' ? 'de administrador' : 'de usuario'} creada exitosamente. Ahora puede iniciar sesión.`);
+          setSuccess(`✅ ¡Cuenta creada exitosamente! Ahora puede iniciar sesión con sus credenciales.`);
           setIsRegistering(false);
           setFullName('');
+          setOffice('');
+          setDepartment('');
           setRole('user');
         }
       } else {
@@ -52,7 +67,7 @@ export function LoginForm() {
         
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
-            setError('Credenciales incorrectas. Si no tiene una cuenta, puede registrarse usando el botón "Crear Cuenta".');
+            setError('Credenciales incorrectas. Verifique su email y contraseña, o cree una cuenta si es nuevo usuario.');
           } else {
             setError(error.message);
           }
@@ -70,6 +85,8 @@ export function LoginForm() {
     setError('');
     setSuccess('');
     setFullName('');
+    setOffice('');
+    setDepartment('');
     setRole('user');
   };
 
@@ -84,10 +101,10 @@ export function LoginForm() {
             </div>
           </div>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Sistema de Impresiones
+            Sistema de Gestión de Impresiones
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            {isRegistering ? 'Crear una nueva cuenta' : 'Inicie sesión para acceder al dashboard'}
+            {isRegistering ? 'Crear cuenta para acceder al sistema' : 'Inicie sesión para acceder al dashboard'}
           </p>
         </div>
 
@@ -95,81 +112,126 @@ export function LoginForm() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="bg-white p-8 rounded-xl shadow-lg">
             <div className="space-y-6">
-              {/* Full Name (only for registration) */}
+              {/* Registration Fields */}
               {isRegistering && (
-                <div>
-                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre Completo
-                  </label>
-                  <input
-                    id="fullName"
-                    name="fullName"
-                    type="text"
-                    required={isRegistering}
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                    placeholder="Juan Pérez"
-                  />
-                </div>
-              )}
+                <>
+                  {/* Full Name */}
+                  <div>
+                    <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
+                      <div className="flex items-center">
+                        <User className="h-4 w-4 mr-2 text-gray-500" />
+                        Nombre Completo *
+                      </div>
+                    </label>
+                    <input
+                      id="fullName"
+                      name="fullName"
+                      type="text"
+                      required={isRegistering}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                      placeholder="Juan Pérez García"
+                    />
+                  </div>
 
-              {/* Role Selection (only for registration) */}
-              {isRegistering && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Tipo de Cuenta
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setRole('user')}
-                      className={`
-                        flex items-center justify-center px-4 py-3 border rounded-lg text-sm font-medium transition-colors
-                        ${role === 'user' 
-                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                        }
-                      `}
-                    >
-                      <User className="h-4 w-4 mr-2" />
-                      Usuario
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRole('admin')}
-                      className={`
-                        flex items-center justify-center px-4 py-3 border rounded-lg text-sm font-medium transition-colors
-                        ${role === 'admin' 
-                          ? 'border-purple-500 bg-purple-50 text-purple-700' 
-                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                        }
-                      `}
-                    >
-                      <Shield className="h-4 w-4 mr-2" />
-                      Administrador
-                    </button>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    {role === 'admin' ? (
-                      <div className="flex items-start">
-                        <Shield className="h-3 w-3 text-purple-500 mt-0.5 mr-1 flex-shrink-0" />
-                        <span>Acceso completo: subir CSV, gestionar usuarios, reportes avanzados</span>
+                  {/* Office */}
+                  <div>
+                    <label htmlFor="office" className="block text-sm font-medium text-gray-700 mb-2">
+                      <div className="flex items-center">
+                        <Building className="h-4 w-4 mr-2 text-gray-500" />
+                        Oficina
                       </div>
-                    ) : (
-                      <div className="flex items-start">
-                        <User className="h-3 w-3 text-blue-500 mt-0.5 mr-1 flex-shrink-0" />
-                        <span>Acceso básico: ver dashboard y reportes generales</span>
-                      </div>
-                    )}
+                    </label>
+                    <input
+                      id="office"
+                      name="office"
+                      type="text"
+                      value={office}
+                      onChange={(e) => setOffice(e.target.value)}
+                      className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                      placeholder="Oficina Central, Sucursal Norte, etc."
+                    />
                   </div>
-                </div>
+
+                  {/* Department */}
+                  <div>
+                    <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-2">
+                      <div className="flex items-center">
+                        <UsersIcon className="h-4 w-4 mr-2 text-gray-500" />
+                        Departamento
+                      </div>
+                    </label>
+                    <input
+                      id="department"
+                      name="department"
+                      type="text"
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                      placeholder="Administración, Ventas, IT, etc."
+                    />
+                  </div>
+
+                  {/* Role Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Tipo de Cuenta
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setRole('user')}
+                        className={`
+                          flex items-center justify-center px-4 py-3 border rounded-lg text-sm font-medium transition-colors
+                          ${role === 'user' 
+                            ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        Usuario
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRole('admin')}
+                        className={`
+                          flex items-center justify-center px-4 py-3 border rounded-lg text-sm font-medium transition-colors
+                          ${role === 'admin' 
+                            ? 'border-purple-500 bg-purple-50 text-purple-700' 
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <Shield className="h-4 w-4 mr-2" />
+                        Administrador
+                      </button>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500">
+                      {role === 'admin' ? (
+                        <div className="flex items-start">
+                          <Shield className="h-3 w-3 text-purple-500 mt-0.5 mr-1 flex-shrink-0" />
+                          <span>Acceso completo: subir CSV, gestionar usuarios, reportes avanzados</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-start">
+                          <User className="h-3 w-3 text-blue-500 mt-0.5 mr-1 flex-shrink-0" />
+                          <span>Acceso básico: ver dashboard y reportes generales</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
 
               {/* Email */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  Correo Electrónico
+                  <div className="flex items-center">
+                    <Mail className="h-4 w-4 mr-2 text-gray-500" />
+                    Correo Electrónico *
+                  </div>
                 </label>
                 <input
                   id="email"
@@ -187,7 +249,7 @@ export function LoginForm() {
               {/* Password */}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Contraseña
+                  Contraseña *
                 </label>
                 <div className="relative">
                   <input
@@ -200,7 +262,7 @@ export function LoginForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="appearance-none relative block w-full px-3 py-3 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                     placeholder={isRegistering ? 'Mínimo 6 caracteres' : 'Ingrese su contraseña'}
-                    minLength={isRegistering ? 6 : undefined}
+                    minLength={6}
                   />
                   <button
                     type="button"
@@ -262,7 +324,7 @@ export function LoginForm() {
                         ) : (
                           <UserPlus className="h-4 w-4 mr-2" />
                         )}
-                        Crear Cuenta {role === 'admin' ? 'de Administrador' : 'de Usuario'}
+                        Crear Cuenta {role === 'admin' ? 'de Administrador' : ''}
                       </>
                     ) : (
                       <>
@@ -296,12 +358,13 @@ export function LoginForm() {
           <div className="flex items-start">
             <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
             <div className="text-xs text-gray-600">
-              <p className="font-medium mb-1">Información del Sistema:</p>
+              <p className="font-medium mb-1">Sistema de Gestión de Impresiones:</p>
               <ul className="space-y-1">
+                <li>• <strong>Registro Libre:</strong> Cualquier persona puede crear una cuenta</li>
                 <li>• <strong>Usuarios:</strong> Acceso a dashboard y reportes básicos</li>
                 <li>• <strong>Administradores:</strong> Gestión completa del sistema</li>
-                <li>• Los datos de impresión se sincronizan automáticamente</li>
-                <li>• Puede crear cuentas de administrador directamente</li>
+                <li>• <strong>Datos Seguros:</strong> Información protegida y encriptada</li>
+                <li>• <strong>Acceso Inmediato:</strong> Sin necesidad de confirmación por email</li>
               </ul>
             </div>
           </div>
