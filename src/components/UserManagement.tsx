@@ -14,9 +14,11 @@ import {
   CheckCircle,
   Mail,
   Phone,
-  MapPin
+  MapPin,
+  UserPlus
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { AdminUserCreation } from './AdminUserCreation';
 
 interface UserData {
   id: string;
@@ -45,6 +47,7 @@ export function UserManagement() {
   const [filterOffice, setFilterOffice] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [editingUsers, setEditingUsers] = useState<{ [key: string]: EditingUser }>({});
+  const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
   
   const queryClient = useQueryClient();
 
@@ -195,6 +198,11 @@ export function UserManagement() {
     }
   };
 
+  const tabs = [
+    { id: 'list', name: 'Lista de Usuarios', icon: Users },
+    { id: 'create', name: 'Crear Usuario', icon: UserPlus }
+  ];
+
   if (usersLoading) {
     return (
       <div className="animate-pulse space-y-6">
@@ -218,7 +226,7 @@ export function UserManagement() {
               Gestión de Usuarios
             </h2>
             <p className="text-gray-600">
-              Clasificar usuarios con nombres reales y asignación de oficinas
+              Administrar usuarios del sistema y crear nuevas cuentas
             </p>
           </div>
         </div>
@@ -276,250 +284,286 @@ export function UserManagement() {
           </div>
         )}
 
-        {/* Filtros */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Buscar Usuario
-            </label>
-            <div className="relative">
-              <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ID, nombre o email..."
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+        {/* Tabs */}
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`
+                    flex items-center py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                    ${isActive 
+                      ? 'border-blue-500 text-blue-600' 
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }
+                  `}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {tab.name}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {/* Contenido de las tabs */}
+      {activeTab === 'create' ? (
+        <AdminUserCreation />
+      ) : (
+        <>
+          {/* Filtros */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Buscar Usuario
+                </label>
+                <div className="relative">
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="ID, nombre o email..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filtrar por Oficina
+                </label>
+                <select
+                  value={filterOffice}
+                  onChange={(e) => setFilterOffice(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Todas las oficinas</option>
+                  {offices?.map(office => (
+                    <option key={office} value={office}>{office}</option>
+                  ))}
+                  <option value="Sin oficina">Sin oficina</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Estado
+                </label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Todos los estados</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Inactive">Inactivo</option>
+                </select>
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterOffice('');
+                    setFilterStatus('');
+                  }}
+                  className="w-full px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Limpiar Filtros
+                </button>
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filtrar por Oficina
-            </label>
-            <select
-              value={filterOffice}
-              onChange={(e) => setFilterOffice(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todas las oficinas</option>
-              {offices?.map(office => (
-                <option key={office} value={office}>{office}</option>
-              ))}
-              <option value="Sin oficina">Sin oficina</option>
-            </select>
-          </div>
+          {/* Tabla de Usuarios */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                Lista de Usuarios ({filteredUsers.length})
+              </h3>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Estado
-            </label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos los estados</option>
-              <option value="Normal">Normal</option>
-              <option value="Inactive">Inactivo</option>
-            </select>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setFilterOffice('');
-                setFilterStatus('');
-              }}
-              className="w-full px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 transition-colors"
-            >
-              Limpiar Filtros
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabla de Usuarios */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            Lista de Usuarios ({filteredUsers.length})
-          </h3>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID Usuario
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nombre Completo
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Oficina
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Departamento
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => {
-                const isEditing = editingUsers[user.id]?.isEditing;
-                const editingUser = editingUsers[user.id] || user;
-                const completionStatus = getCompletionStatus(user);
-                const StatusIcon = getStatusIcon(completionStatus);
-
-                return (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(completionStatus)}`}>
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {completionStatus === 'complete' ? 'Completo' : 
-                         completionStatus === 'partial' ? 'Parcial' : 'Incompleto'}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {user.id}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {user.status}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editingUser.full_name || ''}
-                          onChange={(e) => updateEditingUser(user.id, 'full_name', e.target.value)}
-                          placeholder="Nombre completo"
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      ) : (
-                        <div className="text-sm text-gray-900">
-                          {user.full_name || (
-                            <span className="text-gray-400 italic">Sin nombre</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="email"
-                          value={editingUser.email || ''}
-                          onChange={(e) => updateEditingUser(user.id, 'email', e.target.value)}
-                          placeholder="email@empresa.com"
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      ) : (
-                        <div className="text-sm text-gray-900">
-                          {user.email || (
-                            <span className="text-gray-400 italic">Sin email</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editingUser.office || ''}
-                          onChange={(e) => updateEditingUser(user.id, 'office', e.target.value)}
-                          placeholder="Oficina"
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      ) : (
-                        <div className="text-sm text-gray-900">
-                          {user.office || (
-                            <span className="text-gray-400 italic">Sin oficina</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editingUser.department || ''}
-                          onChange={(e) => updateEditingUser(user.id, 'department', e.target.value)}
-                          placeholder="Departamento"
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      ) : (
-                        <div className="text-sm text-gray-900">
-                          {user.department || (
-                            <span className="text-gray-400 italic">Sin departamento</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {isEditing ? (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => saveUser(user.id)}
-                            disabled={updateUserMutation.isPending}
-                            className="text-green-600 hover:text-green-900 disabled:opacity-50"
-                          >
-                            <Save className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => cancelEditing(user.id)}
-                            disabled={updateUserMutation.isPending}
-                            className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startEditing(user)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      ID Usuario
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nombre Completo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Oficina
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Departamento
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredUsers.map((user) => {
+                    const isEditing = editingUsers[user.id]?.isEditing;
+                    const editingUser = editingUsers[user.id] || user;
+                    const completionStatus = getCompletionStatus(user);
+                    const StatusIcon = getStatusIcon(completionStatus);
 
-        {filteredUsers.length === 0 && (
-          <div className="p-6 text-center">
-            <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No se encontraron usuarios
-            </h3>
-            <p className="text-gray-600">
-              Ajusta los filtros para ver más resultados.
-            </p>
+                    return (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(completionStatus)}`}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {completionStatus === 'complete' ? 'Completo' : 
+                             completionStatus === 'partial' ? 'Parcial' : 'Incompleto'}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.id}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {user.status}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingUser.full_name || ''}
+                              onChange={(e) => updateEditingUser(user.id, 'full_name', e.target.value)}
+                              placeholder="Nombre completo"
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="text-sm text-gray-900">
+                              {user.full_name || (
+                                <span className="text-gray-400 italic">Sin nombre</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isEditing ? (
+                            <input
+                              type="email"
+                              value={editingUser.email || ''}
+                              onChange={(e) => updateEditingUser(user.id, 'email', e.target.value)}
+                              placeholder="email@empresa.com"
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="text-sm text-gray-900">
+                              {user.email || (
+                                <span className="text-gray-400 italic">Sin email</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingUser.office || ''}
+                              onChange={(e) => updateEditingUser(user.id, 'office', e.target.value)}
+                              placeholder="Oficina"
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="text-sm text-gray-900">
+                              {user.office || (
+                                <span className="text-gray-400 italic">Sin oficina</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingUser.department || ''}
+                              onChange={(e) => updateEditingUser(user.id, 'department', e.target.value)}
+                              placeholder="Departamento"
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="text-sm text-gray-900">
+                              {user.department || (
+                                <span className="text-gray-400 italic">Sin departamento</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {isEditing ? (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => saveUser(user.id)}
+                                disabled={updateUserMutation.isPending}
+                                className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                              >
+                                <Save className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => cancelEditing(user.id)}
+                                disabled={updateUserMutation.isPending}
+                                className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => startEditing(user)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredUsers.length === 0 && (
+              <div className="p-6 text-center">
+                <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  No se encontraron usuarios
+                </h3>
+                <p className="text-gray-600">
+                  Ajusta los filtros para ver más resultados.
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
