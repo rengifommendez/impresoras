@@ -54,15 +54,15 @@ export function LoginForm() {
               <img 
                 src="/img/SEDCAUCA.png" 
                 alt="SEDCAUCA logo" 
-                className="h-16 w-16 object-contain"
+                className="h-20 w-20 object-contain"
                 onError={(e) => {
                   // Fallback to icon if image fails to load
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling?.classList.remove('hidden');
                 }}
               />
-              <div className="h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center hidden">
-                <Building className="h-8 w-8 text-white" />
+              <div className="h-20 w-20 bg-blue-600 rounded-full flex items-center justify-center hidden">
+                <Building className="h-10 w-10 text-white" />
               </div>
             </div>
           </div>

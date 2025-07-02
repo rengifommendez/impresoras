@@ -37,15 +37,15 @@ export function Layout({ children, currentPage = 'dashboard', onNavigate }: Layo
               <img 
                 src="/img/SEDCAUCA.png" 
                 alt="SEDCAUCA logo" 
-                className="h-8 w-8 object-contain"
+                className="h-10 w-10 object-contain"
                 onError={(e) => {
                   // Fallback to icon if image fails to load
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling?.classList.remove('hidden');
                 }}
               />
-              <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center hidden">
-                <Building className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center hidden">
+                <Building className="h-6 w-6 text-white" />
               </div>
               <h1 className="ml-3 text-xl font-semibold text-gray-900">
                 SEDCAUCA Impresoras
