@@ -12,6 +12,7 @@ import { UsersSection } from './components/UsersSection';
 import { PrinterManagement } from './components/PrinterManagement';
 import { ImportHistory } from './components/ImportHistory';
 import { TotalReports } from './components/TotalReports';
+import { OfficeStatistics } from './components/OfficeStatistics';
 
 // Crear cliente de React Query
 const queryClient = new QueryClient({
@@ -25,7 +26,7 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const { user, loading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'upload' | 'users' | 'reports' | 'management' | 'printers' | 'import-history' | 'total-reports'>('dashboard');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'upload' | 'users' | 'reports' | 'management' | 'printers' | 'import-history' | 'total-reports' | 'office-stats'>('dashboard');
 
   if (loading) {
     return (
@@ -57,6 +58,8 @@ function AppContent() {
         return <ImportHistory />;
       case 'total-reports':
         return <TotalReports />;
+      case 'office-stats':
+        return <OfficeStatistics />;
       default:
         return <Dashboard />;
     }

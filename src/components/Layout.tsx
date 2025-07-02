@@ -1,10 +1,10 @@
 import React from 'react';
-import { LogOut, Printer, BarChart3, Upload, Users, FileText, Settings, Monitor, Database, Target } from 'lucide-react';
+import { LogOut, Printer, BarChart3, Upload, Users, FileText, Settings, Monitor, Database, Target, Building } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface LayoutProps {
   children: React.ReactNode;
-  currentPage?: 'dashboard' | 'upload' | 'users' | 'reports' | 'management' | 'printers' | 'import-history' | 'total-reports';
+  currentPage?: 'dashboard' | 'upload' | 'users' | 'reports' | 'management' | 'printers' | 'import-history' | 'total-reports' | 'office-stats';
   onNavigate?: (page: string) => void;
 }
 
@@ -16,6 +16,7 @@ export function Layout({ children, currentPage = 'dashboard', onNavigate }: Layo
     ...(isAdmin() ? [{ id: 'upload', name: 'Subir CSV', icon: Upload }] : []),
     { id: 'users', name: 'Usuarios', icon: Users },
     { id: 'printers', name: 'Impresoras', icon: Monitor },
+    { id: 'office-stats', name: 'Por Oficina', icon: Building },
     { id: 'reports', name: 'Reportes', icon: FileText },
     { id: 'total-reports', name: 'Reporte Total', icon: Target },
     ...(isAdmin() ? [{ id: 'import-history', name: 'Historial CSV', icon: Database }] : []),
