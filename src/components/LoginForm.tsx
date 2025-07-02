@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Printer, Eye, EyeOff, LogIn, AlertCircle, Shield } from 'lucide-react';
+import { Eye, EyeOff, LogIn, AlertCircle, Shield, Building } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function LoginForm() {
@@ -50,13 +50,28 @@ export function LoginForm() {
         {/* Header */}
         <div className="text-center">
           <div className="flex justify-center">
-            <div className="bg-blue-600 p-3 rounded-full">
-              <Printer className="h-8 w-8 text-white" />
+            <div className="relative">
+              <img 
+                src="/img/SEDCAUCA.png" 
+                alt="SEDCAUCA logo" 
+                className="h-16 w-16 object-contain"
+                onError={(e) => {
+                  // Fallback to icon if image fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <div className="h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center hidden">
+                <Building className="h-8 w-8 text-white" />
+              </div>
             </div>
           </div>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Sistema de Gestión de Impresiones
+            SEDCAUCA
           </h2>
+          <h3 className="mt-2 text-xl font-semibold text-gray-700">
+            Sistema de Gestión de Impresiones
+          </h3>
           <p className="mt-2 text-sm text-gray-600">
             Inicie sesión para acceder al dashboard
           </p>
@@ -80,7 +95,7 @@ export function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="usuario@empresa.com"
+                  placeholder="usuario@sedcauca.gov.co"
                 />
               </div>
 

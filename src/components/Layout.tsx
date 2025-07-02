@@ -1,7 +1,6 @@
 import React from 'react';
-import { LogOut, Printer, BarChart3, Upload, Users, FileText, Settings, Monitor, Database, Target, Building } from 'lucide-react';
+import { LogOut, BarChart3, Upload, Users, FileText, Settings, Monitor, Database, Target, Building } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import SEDCAUCALogo from '../img/SEDCAUCA.png';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,7 +34,19 @@ export function Layout({ children, currentPage = 'dashboard', onNavigate }: Layo
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <img src={SEDCAUCALogo} alt="SEDCAUCA logo" className="h-8 w-8" />
+              <img 
+                src="/img/SEDCAUCA.png" 
+                alt="SEDCAUCA logo" 
+                className="h-8 w-8 object-contain"
+                onError={(e) => {
+                  // Fallback to icon if image fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center hidden">
+                <Building className="h-5 w-5 text-white" />
+              </div>
               <h1 className="ml-3 text-xl font-semibold text-gray-900">
                 SEDCAUCA Impresoras
               </h1>
