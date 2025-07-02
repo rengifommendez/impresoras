@@ -34,9 +34,9 @@ export function Layout({ children, currentPage = 'dashboard', onNavigate }: Layo
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Printer className="h-8 w-8 text-blue-600" />
+              <img src={SEDCAUCALogo} alt="SEDCAUCA logo" className="h-8 w-8" />
               <h1 className="ml-3 text-xl font-semibold text-gray-900">
-                Sistema de Impresiones
+                SEDCAUCA Impresoras
               </h1>
             </div>
             
