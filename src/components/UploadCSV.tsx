@@ -337,7 +337,7 @@ export function UploadCSV() {
             .from('users')
             .select('id, full_name, email, office, department')
             .eq('id', userId)
-            .single();
+            .limit(1);
 
           const userUpdateData: any = {
             id: userId,
@@ -345,7 +345,7 @@ export function UploadCSV() {
             updated_at: new Date().toISOString(),
           };
 
-          if (!existingUser) {
+          if (!existingUser || existingUser.length === 0) {
             console.log(`👤 Creando nuevo usuario: ${userId}`);
             usersCreated++;
           } else {
@@ -393,14 +393,16 @@ export function UploadCSV() {
           const year = reportTimestamp.getFullYear();
           const month = reportTimestamp.getMonth() + 1;
 
-          // Obtener datos del mes anterior para calcular diferencias
-          const { data: prevMonthData } = await supabase
+          // Obtener datos del mes anterior para calcular diferencias - FIX: usar limit(1) en lugar de single()
+          const { data: prevMonthDataArray } = await supabase
             .from('prints_monthly')
             .select('print_total, copy_total, scan_total, fax_total')
             .eq('user_id', userId)
             .eq('year', month === 1 ? year - 1 : year)
             .eq('month', month === 1 ? 12 : month - 1)
-            .single();
+            .limit(1);
+
+          const prevMonthData = prevMonthDataArray && prevMonthDataArray.length > 0 ? prevMonthDataArray[0] : null;
 
           const printDiff = prevMonthData ? Math.max(0, printTotal - (prevMonthData.print_total || 0)) : printTotal;
           const copyDiff = prevMonthData ? Math.max(0, copyTotal - (prevMonthData.copy_total || 0)) : copyTotal;
