@@ -14,6 +14,7 @@ interface UploadResult {
     duration: number;
     usersCreated: number;
     usersUpdated: number;
+    sampleData?: any[];
   };
   errors?: string[];
 }
@@ -169,11 +170,17 @@ export function UploadCSV() {
         };
       }
 
-      // Detectar si hay header
+      // Analizar la primera línea para detectar header y estructura
       const firstLine = parseCSVLine(lines[0]);
+      console.log('🔍 Primera línea analizada:', firstLine);
+      
+      // Detectar si hay header basándose en contenido
       const hasHeader = firstLine[0]?.toLowerCase().includes('cuenta') || 
                        firstLine[0]?.toLowerCase().includes('id') ||
-                       firstLine.length > 8; // Si tiene muchas columnas, probablemente es header
+                       firstLine.some(col => col.toLowerCase().includes('imprimir') || 
+                                           col.toLowerCase().includes('copiar') ||
+                                           col.toLowerCase().includes('escanear') ||
+                                           col.toLowerCase().includes('fax'));
       
       const dataLines = hasHeader ? lines.slice(1) : lines;
       console.log(`📋 Líneas de datos a procesar: ${dataLines.length} (Header detectado: ${hasHeader})`);
@@ -185,11 +192,16 @@ export function UploadCSV() {
         };
       }
 
+      // Analizar estructura del CSV con las primeras líneas
+      const sampleLines = dataLines.slice(0, 3).map(line => parseCSVLine(line));
+      console.log('📝 Muestra de datos:', sampleLines);
+
       let processed = 0;
       let success = 0;
       let failed = 0;
       const errors: string[] = [];
       const batchId = crypto.randomUUID();
+      const sampleData: any[] = [];
 
       console.log(`🔄 Iniciando procesamiento con batch ID: ${batchId}`);
 
@@ -220,33 +232,73 @@ export function UploadCSV() {
             continue;
           }
 
-          // Función helper para parsear números
+          // Función helper para parsear números - MEJORADA
           const parseNumber = (value: string | undefined): number => {
-            if (!value || value.trim() === '') return 0;
-            const cleaned = value.trim().replace(/[^\d.-]/g, '');
+            if (!value || value.trim() === '' || value.trim() === '-') return 0;
+            
+            // Limpiar el valor: remover espacios, comas, puntos como separadores de miles
+            let cleaned = value.trim()
+              .replace(/\s/g, '') // Remover espacios
+              .replace(/,/g, ''); // Remover comas
+            
+            // Si contiene punto, verificar si es decimal o separador de miles
+            if (cleaned.includes('.')) {
+              const parts = cleaned.split('.');
+              if (parts.length === 2 && parts[1].length <= 2) {
+                // Probablemente es decimal
+                const num = parseFloat(cleaned);
+                return isNaN(num) ? 0 : Math.max(0, Math.round(num));
+              } else {
+                // Probablemente es separador de miles
+                cleaned = cleaned.replace(/\./g, '');
+              }
+            }
+            
             const num = parseInt(cleaned);
             return isNaN(num) ? 0 : Math.max(0, num);
           };
 
-          // Extraer valores numéricos
-          const printTotal = parseNumber(values[2]);
-          const printColor = parseNumber(values[3]);
-          const printMono = Math.max(0, printTotal - printColor);
+          // MAPEO MEJORADO DE COLUMNAS - Detectar automáticamente la estructura
+          let printTotal = 0, printColor = 0, copyTotal = 0, copyColor = 0, scanTotal = 0, faxTotal = 0;
           
-          // Intentar extraer más columnas si están disponibles
-          let copyTotal = 0, copyColor = 0, scanTotal = 0, faxTotal = 0;
-          
-          if (values.length > 4) {
+          // Estrategia 1: Mapeo por posición estándar (más común)
+          if (values.length >= 8) {
+            printTotal = parseNumber(values[2]);   // Columna 3: Total impresiones
+            printColor = parseNumber(values[3]);   // Columna 4: Impresiones color
+            copyTotal = parseNumber(values[4]);    // Columna 5: Total copias
+            copyColor = parseNumber(values[5]);    // Columna 6: Copias color
+            scanTotal = parseNumber(values[6]);    // Columna 7: Total escaneos
+            faxTotal = parseNumber(values[7]);     // Columna 8: Total fax
+          } else if (values.length >= 6) {
+            // Formato reducido
+            printTotal = parseNumber(values[2]);
+            printColor = parseNumber(values[3]);
             copyTotal = parseNumber(values[4]);
-            if (values.length > 5) copyColor = parseNumber(values[5]);
-            if (values.length > 6) scanTotal = parseNumber(values[6]);
-            if (values.length > 7) faxTotal = parseNumber(values[7]);
+            scanTotal = parseNumber(values[5]);
+            faxTotal = values.length > 6 ? parseNumber(values[6]) : 0;
+          } else if (values.length >= 4) {
+            // Formato mínimo
+            printTotal = parseNumber(values[2]);
+            copyTotal = parseNumber(values[3]);
+            scanTotal = values.length > 4 ? parseNumber(values[4]) : 0;
+          } else {
+            // Solo impresiones
+            printTotal = parseNumber(values[2]);
           }
-          
+
+          // Calcular valores derivados
+          const printMono = Math.max(0, printTotal - printColor);
           const copyMono = Math.max(0, copyTotal - copyColor);
 
-          // Extraer timestamp (última columna)
-          const timestampStr = values[values.length - 1]?.trim();
+          // Extraer timestamp (última columna no vacía)
+          let timestampStr = '';
+          for (let i = values.length - 1; i >= 0; i--) {
+            if (values[i] && values[i].trim() !== '') {
+              timestampStr = values[i].trim();
+              break;
+            }
+          }
+
           const reportTimestamp = parseTimestamp(timestampStr);
 
           if (!reportTimestamp || isNaN(reportTimestamp.getTime())) {
@@ -255,42 +307,55 @@ export function UploadCSV() {
             continue;
           }
 
-          console.log(`✅ Procesando usuario ${userId}: prints=${printTotal}, copies=${copyTotal}, scans=${scanTotal}`);
+          // Guardar muestra de datos procesados para debugging
+          if (sampleData.length < 5) {
+            sampleData.push({
+              userId,
+              printTotal,
+              printColor,
+              printMono,
+              copyTotal,
+              copyColor,
+              copyMono,
+              scanTotal,
+              faxTotal,
+              timestamp: reportTimestamp.toISOString(),
+              originalLine: values
+            });
+          }
+
+          console.log(`✅ Procesando usuario ${userId}:`, {
+            prints: `${printTotal} (${printColor} color, ${printMono} mono)`,
+            copies: `${copyTotal} (${copyColor} color, ${copyMono} mono)`,
+            scans: scanTotal,
+            fax: faxTotal,
+            timestamp: reportTimestamp.toISOString()
+          });
 
           // 1. UPSERT INTELIGENTE DE USUARIO - PRESERVAR DATOS EXISTENTES
-          // Primero verificar si el usuario ya existe
           const { data: existingUser } = await supabase
             .from('users')
             .select('id, full_name, email, office, department')
             .eq('id', userId)
             .single();
 
-          // Preparar datos para upsert - solo actualizar campos vacíos
           const userUpdateData: any = {
             id: userId,
             status: accountStatus,
             updated_at: new Date().toISOString(),
           };
 
-          // REGLA CRÍTICA: Solo actualizar si el campo está vacío o es null
           if (!existingUser) {
-            // Usuario nuevo - se puede crear sin datos adicionales
             console.log(`👤 Creando nuevo usuario: ${userId}`);
             usersCreated++;
           } else {
-            // Usuario existente - PRESERVAR datos establecidos
-            console.log(`🔄 Actualizando usuario existente: ${userId} (preservando datos personales)`);
+            console.log(`🔄 Actualizando usuario existente: ${userId}`);
             usersUpdated++;
-            
-            // NO actualizar full_name, email, office, department si ya existen
-            // Solo actualizar status y updated_at
           }
 
           const { error: userError } = await supabase
             .from('users')
-            .upsert(userUpdateData, {
-              onConflict: 'id'
-            });
+            .upsert(userUpdateData, { onConflict: 'id' });
 
           if (userError) {
             console.error('❌ Error upserting user:', userError);
@@ -324,24 +389,23 @@ export function UploadCSV() {
             continue;
           }
 
-          // 3. Actualizar datos mensuales (siempre se actualizan con los últimos valores)
+          // 3. Actualizar datos mensuales (CRÍTICO: usar los valores TOTALES del CSV)
           const year = reportTimestamp.getFullYear();
           const month = reportTimestamp.getMonth() + 1;
 
-          // Obtener datos del mes anterior para diferencias
+          // Obtener datos del mes anterior para calcular diferencias
           const { data: prevMonthData } = await supabase
             .from('prints_monthly')
             .select('print_total, copy_total, scan_total, fax_total')
             .eq('user_id', userId)
             .eq('year', month === 1 ? year - 1 : year)
-            .eq('month', month === 1 ? 12 : month - 1);
+            .eq('month', month === 1 ? 12 : month - 1)
+            .single();
 
-          const prevMonth = prevMonthData && prevMonthData.length > 0 ? prevMonthData[0] : null;
-
-          const printDiff = prevMonth ? printTotal - prevMonth.print_total : printTotal;
-          const copyDiff = prevMonth ? copyTotal - prevMonth.copy_total : copyTotal;
-          const scanDiff = prevMonth ? scanTotal - prevMonth.scan_total : scanTotal;
-          const faxDiff = prevMonth ? faxTotal - prevMonth.fax_total : faxTotal;
+          const printDiff = prevMonthData ? Math.max(0, printTotal - (prevMonthData.print_total || 0)) : printTotal;
+          const copyDiff = prevMonthData ? Math.max(0, copyTotal - (prevMonthData.copy_total || 0)) : copyTotal;
+          const scanDiff = prevMonthData ? Math.max(0, scanTotal - (prevMonthData.scan_total || 0)) : scanTotal;
+          const faxDiff = prevMonthData ? Math.max(0, faxTotal - (prevMonthData.fax_total || 0)) : faxTotal;
 
           const { error: monthlyError } = await supabase
             .from('prints_monthly')
@@ -389,6 +453,7 @@ export function UploadCSV() {
 
       const duration = Date.now() - startTime;
       console.log(`🏁 Procesamiento completado: ${success} exitosos, ${failed} fallidos de ${processed} total en ${duration}ms`);
+      console.log('📊 Muestra de datos procesados:', sampleData);
 
       // 4. Registrar en log de importación
       try {
@@ -400,7 +465,10 @@ export function UploadCSV() {
             rows_processed: processed,
             rows_success: success,
             rows_failed: failed,
-            error_details: errors.length > 0 ? { errors: errors.slice(0, 20) } : null,
+            error_details: errors.length > 0 ? { 
+              errors: errors.slice(0, 20),
+              sampleData: sampleData.slice(0, 3)
+            } : null,
             imported_by: user?.id,
           });
 
@@ -414,7 +482,7 @@ export function UploadCSV() {
       return {
         success: success > 0,
         message: success > 0 
-          ? `🎉 ¡Importación completada exitosamente! ${success} de ${processed} registros procesados. Los datos personales existentes se preservaron automáticamente.`
+          ? `🎉 ¡Importación completada exitosamente! ${success} de ${processed} registros procesados correctamente. Todos los datos de impresiones, copias, escaneos y fax han sido importados.`
           : `❌ No se pudieron procesar los registros. Revise el formato del archivo.`,
         details: { 
           processed, 
@@ -423,7 +491,8 @@ export function UploadCSV() {
           batchId, 
           duration: Math.round(duration / 1000),
           usersCreated,
-          usersUpdated
+          usersUpdated,
+          sampleData
         },
         errors: errors.slice(0, 10), // Mostrar solo los primeros 10 errores
       };
@@ -712,6 +781,28 @@ export function UploadCSV() {
                   </div>
                 )}
 
+                {/* Muestra de datos procesados */}
+                {result.details?.sampleData && result.details.sampleData.length > 0 && (
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mb-4">
+                    <h4 className="text-sm font-medium text-blue-900 mb-3">
+                      ✅ Muestra de datos procesados correctamente:
+                    </h4>
+                    <div className="space-y-2">
+                      {result.details.sampleData.slice(0, 3).map((sample, index) => (
+                        <div key={index} className="text-xs bg-white p-2 rounded border">
+                          <div className="font-mono">
+                            <strong>Usuario {sample.userId}:</strong> 
+                            Impresiones: {sample.printTotal} ({sample.printColor} color, {sample.printMono} mono) | 
+                            Copias: {sample.copyTotal} ({sample.copyColor} color, {sample.copyMono} mono) | 
+                            Escaneos: {sample.scanTotal} | 
+                            Fax: {sample.faxTotal}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {result.errors && result.errors.length > 0 && (
                   <div className="bg-red-100 rounded-lg p-4 border border-red-200">
                     <p className="text-sm font-medium text-red-800 mb-2">
@@ -759,6 +850,10 @@ export function UploadCSV() {
                       <li>Columna 2: Estado de la cuenta</li>
                       <li>Columna 3: Total de impresiones</li>
                       <li>Columna 4: Impresiones a color</li>
+                      <li>Columna 5: Total de copias</li>
+                      <li>Columna 6: Copias a color</li>
+                      <li>Columna 7: Total de escaneos</li>
+                      <li>Columna 8: Total de fax</li>
                       <li>Última columna: Marca de tiempo</li>
                     </ul>
                   </div>
@@ -774,7 +869,7 @@ export function UploadCSV() {
                       <li>Campos vacíos = 0</li>
                       <li>Se crean usuarios automáticamente</li>
                       <li>Datos se agregan por mes</li>
-                      <li><strong>🔒 Los nombres, emails y oficinas NO se modifican</strong></li>
+                      <li><strong>✅ Todos los tipos de datos se procesan</strong></li>
                     </ul>
                   </div>
                 </div>
@@ -783,23 +878,24 @@ export function UploadCSV() {
           </div>
         </div>
 
-        {/* Data Preservation Notice */}
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        {/* Data Processing Notice */}
+        <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
           <div className="flex items-start">
-            <CheckCircle className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
+            <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 mr-3 flex-shrink-0" />
             <div>
-              <h4 className="text-sm font-medium text-blue-900 mb-2">
-                🔒 Protección de Datos Personales
+              <h4 className="text-sm font-medium text-green-900 mb-2">
+                ✅ Procesamiento Mejorado de Datos
               </h4>
-              <p className="text-sm text-blue-700">
-                <strong>Los datos personales establecidos se preservan automáticamente:</strong>
+              <p className="text-sm text-green-700">
+                <strong>El sistema ahora procesa correctamente todos los tipos de datos:</strong>
               </p>
-              <ul className="text-sm text-blue-700 list-disc list-inside mt-2 space-y-1">
-                <li><strong>Nombre Completo:</strong> No se modifica si ya está definido</li>
-                <li><strong>Email:</strong> Se mantiene el email asignado</li>
-                <li><strong>Oficina:</strong> La oficina asignada no cambia</li>
-                <li><strong>Departamento:</strong> Se preserva la clasificación</li>
-                <li><strong>Solo se actualizan:</strong> Conteos de impresiones, copias, escaneos y fax</li>
+              <ul className="text-sm text-green-700 list-disc list-inside mt-2 space-y-1">
+                <li><strong>Impresiones:</strong> Total y separación color/monocromo</li>
+                <li><strong>Copias:</strong> Total y separación color/monocromo</li>
+                <li><strong>Escaneos:</strong> Conteo total de documentos escaneados</li>
+                <li><strong>Fax:</strong> Conteo total de faxes enviados/recibidos</li>
+                <li><strong>Detección automática:</strong> Adapta el formato del CSV automáticamente</li>
+                <li><strong>Validación mejorada:</strong> Manejo robusto de números y formatos</li>
               </ul>
             </div>
           </div>
