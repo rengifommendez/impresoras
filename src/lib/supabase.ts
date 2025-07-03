@@ -101,3 +101,17 @@ export interface MonthlyDetail {
   print_diff: number;
   copy_diff: number;
 }
+
+// Función helper para llamar total_by_user correctamente
+export const getTotalByUser = async (targetUserId?: string) => {
+  const { data, error } = await supabase.rpc('total_by_user', {
+    params: targetUserId ? { target_user_id: targetUserId } : {}
+  });
+  
+  if (error) {
+    console.error('Error calling total_by_user:', error);
+    throw error;
+  }
+  
+  return data as UserTotal[];
+};

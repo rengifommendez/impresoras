@@ -13,7 +13,7 @@ import {
   Download,
   Eye
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, getTotalByUser } from '../lib/supabase';
 import { UsersTable } from './UsersTable';
 
 interface UserData {
@@ -61,13 +61,28 @@ export function UsersSection() {
       
       if (usersError) throw usersError;
 
-      // Luego obtener totales por usuario usando la función RPC
-      const { data: userTotals, error: totalsError } = await supabase
-        .rpc('total_by_user', { target_user_id: null });
-      
-      if (totalsError) {
-        console.warn('Error getting user totals:', totalsError);
-        // Si falla la función RPC, devolver usuarios sin actividad
+      // Luego obtener totales por usuario usando la función helper
+      try {
+        const userTotals = await getTotalByUser();
+        
+        // Combinar datos de usuarios con totales
+        const usersWithTotals = users.map(user => {
+          const userTotal = userTotals?.find((ut: any) => ut.user_id === user.id);
+          return {
+            ...user,
+            total_prints: userTotal?.total_prints || 0,
+            total_copies: userTotal?.total_copies || 0,
+            total_scans: userTotal?.total_scans || 0,
+            total_fax: userTotal?.total_fax || 0,
+            last_activity: userTotal?.last_activity || null,
+            months_active: 0 // Calcular si es necesario
+          };
+        });
+
+        return usersWithTotals as UserWithActivity[];
+      } catch (error) {
+        console.warn('Error getting user totals, using fallback:', error);
+        // Fallback: devolver usuarios sin actividad
         return users.map(user => ({
           ...user,
           total_prints: 0,
@@ -78,22 +93,6 @@ export function UsersSection() {
           months_active: 0
         })) as UserWithActivity[];
       }
-
-      // Combinar datos de usuarios con totales
-      const usersWithTotals = users.map(user => {
-        const userTotal = userTotals?.find((ut: any) => ut.user_id === user.id);
-        return {
-          ...user,
-          total_prints: userTotal?.total_prints || 0,
-          total_copies: userTotal?.total_copies || 0,
-          total_scans: userTotal?.total_scans || 0,
-          total_fax: userTotal?.total_fax || 0,
-          last_activity: userTotal?.last_activity || null,
-          months_active: userTotal?.months_active || 0
-        };
-      });
-
-      return usersWithTotals as UserWithActivity[];
     },
   });
 
