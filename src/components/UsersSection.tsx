@@ -138,7 +138,8 @@ export function UsersSection() {
     const matchesSearch = !searchTerm || 
       user.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.office && user.office.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesOffice = !filterOffice || 
       (filterOffice === 'Sin oficina' ? !user.office : user.office === filterOffice);
@@ -295,7 +296,7 @@ export function UsersSection() {
           </div>
         )}
 
-        {/* Filtros */}
+        {/* Filtros Mejorados */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -307,7 +308,7 @@ export function UsersSection() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ID, nombre o email..."
+                placeholder="ID, nombre, email u oficina..."
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -317,32 +318,38 @@ export function UsersSection() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Filtrar por Oficina
             </label>
-            <select
-              value={filterOffice}
-              onChange={(e) => setFilterOffice(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todas las oficinas</option>
-              {offices?.map(office => (
-                <option key={office} value={office}>{office}</option>
-              ))}
-              <option value="Sin oficina">Sin oficina</option>
-            </select>
+            <div className="relative">
+              <Building className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <select
+                value={filterOffice}
+                onChange={(e) => setFilterOffice(e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+              >
+                <option value="">Todas las oficinas</option>
+                {offices?.map(office => (
+                  <option key={office} value={office}>{office}</option>
+                ))}
+                <option value="Sin oficina">Sin oficina</option>
+              </select>
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Estado
             </label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos los estados</option>
-              <option value="Normal">Normal</option>
-              <option value="Inactive">Inactivo</option>
-            </select>
+            <div className="relative">
+              <Filter className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+              >
+                <option value="">Todos los estados</option>
+                <option value="Normal">Normal</option>
+                <option value="Inactive">Inactivo</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex items-end">
@@ -358,6 +365,24 @@ export function UsersSection() {
             </button>
           </div>
         </div>
+
+        {/* Información de filtros activos */}
+        {(searchTerm || filterOffice || filterStatus) && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center">
+              <Filter className="h-4 w-4 text-blue-600 mr-2" />
+              <div className="text-sm text-blue-700">
+                <span className="font-medium">Filtros activos:</span>
+                {searchTerm && <span className="ml-2">Búsqueda: "{searchTerm}"</span>}
+                {filterOffice && <span className="ml-2">Oficina: "{filterOffice}"</span>}
+                {filterStatus && <span className="ml-2">Estado: "{filterStatus}"</span>}
+                <span className="ml-2 font-medium">
+                  ({filteredUsers.length} de {usersWithActivity?.length || 0} usuarios)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabla de Usuarios */}
@@ -393,6 +418,19 @@ export function UsersSection() {
                 : 'Ajusta los filtros para ver más resultados.'
               }
             </p>
+            {(searchTerm || filterOffice || filterStatus) && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilterOffice('');
+                  setFilterStatus('');
+                }}
+                className="mt-3 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Limpiar todos los filtros
+              </button>
+            )}
           </div>
         )}
       </div>

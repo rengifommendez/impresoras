@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Activity, Printer, Copy, Scan, Send } from 'lucide-react';
+import { User, Activity, Printer, Copy, Scan, Send, Building } from 'lucide-react';
 import { UserTotal } from '../lib/supabase';
 
 interface UsersTableProps {
@@ -111,19 +111,38 @@ export function UsersTable({ users, loading, onUserClick }: UsersTableProps) {
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {user.total_prints.toLocaleString()}
+                <div className="flex items-center">
+                  <div className="text-lg font-semibold text-blue-600">
+                    {user.total_prints.toLocaleString()}
+                  </div>
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {user.total_copies.toLocaleString()}
+                <div className="flex items-center">
+                  <div className="text-lg font-semibold text-green-600">
+                    {user.total_copies.toLocaleString()}
+                  </div>
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {user.total_scans.toLocaleString()}
+                <div className="flex items-center">
+                  <div className="text-lg font-semibold text-yellow-600">
+                    {user.total_scans.toLocaleString()}
+                  </div>
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {user.total_fax.toLocaleString()}
+                <div className="flex items-center">
+                  <div className="text-lg font-semibold text-red-600">
+                    {user.total_fax.toLocaleString()}
+                  </div>
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {formatDate(user.last_activity)}
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                  {formatDate(user.last_activity)}
+                </div>
               </td>
             </tr>
           ))}
