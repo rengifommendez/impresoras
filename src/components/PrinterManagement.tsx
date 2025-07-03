@@ -19,7 +19,15 @@ import {
   Trash2,
   Eye,
   MapPin,
-  Activity
+  Activity,
+  UserCheck,
+  UserX,
+  Crown,
+  Star,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
+  Target
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -59,6 +67,15 @@ interface EditingPrinter extends PrinterData {
   isEditing: boolean;
 }
 
+interface AvailableUser {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  office: string | null;
+  department: string | null;
+  status: string;
+}
+
 export function PrinterManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOffice, setFilterOffice] = useState('');
@@ -67,6 +84,10 @@ export function PrinterManagement() {
   const [editingPrinters, setEditingPrinters] = useState<{ [key: string]: EditingPrinter }>({});
   const [selectedPrinter, setSelectedPrinter] = useState<string | null>(null);
   const [showAssignments, setShowAssignments] = useState(false);
+  const [showQuickAssign, setShowQuickAssign] = useState<string | null>(null);
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [bulkAssignMode, setBulkAssignMode] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [newPrinter, setNewPrinter] = useState<NewPrinter>({
     name: '',
     ip_address: '',
@@ -105,10 +126,10 @@ export function PrinterManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('users')
-        .select('id, full_name, email, office, department')
+        .select('id, full_name, email, office, department, status')
         .order('full_name');
       if (error) throw error;
-      return data;
+      return data as AvailableUser[];
     },
   });
 
@@ -171,6 +192,15 @@ export function PrinterManagement() {
       isPrimary: boolean;
       notes?: string;
     }) => {
+      // Si es asignación principal, primero quitar la asignación principal existente
+      if (isPrimary) {
+        await supabase
+          .from('user_printer_assignments')
+          .update({ is_primary: false })
+          .eq('printer_id', printerId)
+          .eq('is_primary', true);
+      }
+
       const { error } = await supabase
         .from('user_printer_assignments')
         .insert({
@@ -184,6 +214,30 @@ export function PrinterManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['printers'] });
+      setShowQuickAssign(null);
+    }
+  });
+
+  // Mutation para asignación masiva
+  const bulkAssignMutation = useMutation({
+    mutationFn: async ({ userIds, printerId }: { userIds: string[]; printerId: string }) => {
+      const assignments = userIds.map(userId => ({
+        user_id: userId,
+        printer_id: printerId,
+        is_primary: false,
+        notes: `Asignación masiva - ${new Date().toLocaleDateString()}`
+      }));
+
+      const { error } = await supabase
+        .from('user_printer_assignments')
+        .insert(assignments);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['printers'] });
+      setBulkAssignMode(false);
+      setSelectedUsers(new Set());
     }
   });
 
@@ -203,18 +257,28 @@ export function PrinterManagement() {
     }
   });
 
-  // Filtrar impresoras
-  const filteredPrinters = printers?.filter(printer => {
-    const matchesSearch = !searchTerm || 
-      printer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      printer.ip_address.includes(searchTerm) ||
-      printer.model.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesOffice = !filterOffice || printer.office === filterOffice;
-    const matchesStatus = !filterStatus || printer.status === filterStatus;
-    
-    return matchesSearch && matchesOffice && matchesStatus;
-  }) || [];
+  // Mutation para cambiar usuario principal
+  const setPrimaryUserMutation = useMutation({
+    mutationFn: async ({ userId, printerId }: { userId: string; printerId: string }) => {
+      // Primero quitar todas las asignaciones principales de esta impresora
+      await supabase
+        .from('user_printer_assignments')
+        .update({ is_primary: false })
+        .eq('printer_id', printerId);
+
+      // Luego establecer el nuevo usuario principal
+      const { error } = await supabase
+        .from('user_printer_assignments')
+        .update({ is_primary: true })
+        .eq('user_id', userId)
+        .eq('printer_id', printerId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-assignments'] });
+    }
+  });
 
   // Funciones para manejar la edición
   const startEditing = (printer: PrinterData) => {
@@ -262,6 +326,66 @@ export function PrinterManagement() {
     }));
   };
 
+  // Filtrar impresoras
+  const filteredPrinters = printers?.filter(printer => {
+    const matchesSearch = !searchTerm || 
+      printer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      printer.ip_address.includes(searchTerm) ||
+      printer.model.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesOffice = !filterOffice || printer.office === filterOffice;
+    const matchesStatus = !filterStatus || printer.status === filterStatus;
+    
+    return matchesSearch && matchesOffice && matchesStatus;
+  }) || [];
+
+  // Filtrar usuarios disponibles para asignación
+  const getAvailableUsersForPrinter = (printerId: string) => {
+    if (!availableUsers) return [];
+    
+    const assignedUserIds = userAssignments?.map(ua => ua.user_id) || [];
+    const available = availableUsers.filter(user => 
+      !assignedUserIds.includes(user.id) &&
+      (!assignmentSearch || 
+        user.full_name?.toLowerCase().includes(assignmentSearch.toLowerCase()) ||
+        user.id.toLowerCase().includes(assignmentSearch.toLowerCase()) ||
+        user.email?.toLowerCase().includes(assignmentSearch.toLowerCase())
+      )
+    );
+
+    return available;
+  };
+
+  const handleQuickAssign = (userId: string, printerId: string, isPrimary: boolean = false) => {
+    assignUserMutation.mutate({
+      userId,
+      printerId,
+      isPrimary,
+      notes: `Asignación rápida - ${new Date().toLocaleDateString()}`
+    });
+  };
+
+  const handleBulkAssign = (printerId: string) => {
+    if (selectedUsers.size === 0) return;
+    
+    bulkAssignMutation.mutate({
+      userIds: Array.from(selectedUsers),
+      printerId
+    });
+  };
+
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUsers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) {
+        newSet.delete(userId);
+      } else {
+        newSet.add(userId);
+      }
+      return newSet;
+    });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Active': return 'text-green-600 bg-green-100';
@@ -283,16 +407,6 @@ export function PrinterManagement() {
   const handleCreatePrinter = (e: React.FormEvent) => {
     e.preventDefault();
     createPrinterMutation.mutate(newPrinter);
-  };
-
-  const handleAssignUser = (userId: string, isPrimary: boolean = false) => {
-    if (!selectedPrinter) return;
-    assignUserMutation.mutate({
-      userId,
-      printerId: selectedPrinter,
-      isPrimary,
-      notes: `Asignado el ${new Date().toLocaleDateString()}`
-    });
   };
 
   if (printersLoading) {
@@ -603,162 +717,289 @@ export function PrinterManagement() {
                 const StatusIcon = getStatusIcon(printer.status);
                 const isEditing = editingPrinters[printer.id]?.isEditing;
                 const editingPrinter = editingPrinters[printer.id] || printer;
+                const isQuickAssigning = showQuickAssign === printer.id;
 
                 return (
-                  <tr key={printer.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {isEditing ? (
-                        <select
-                          value={editingPrinter.status}
-                          onChange={(e) => updateEditingPrinter(printer.id, 'status', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="Active">Activa</option>
-                          <option value="Inactive">Inactiva</option>
-                          <option value="Maintenance">Mantenimiento</option>
-                        </select>
-                      ) : (
-                        <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(printer.status)}`}>
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {printer.status === 'Active' ? 'Activa' : 
-                           printer.status === 'Inactive' ? 'Inactiva' : 'Mantenimiento'}
-                        </div>
-                      )}
-                    </td>
+                  <React.Fragment key={printer.id}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isEditing ? (
+                          <select
+                            value={editingPrinter.status}
+                            onChange={(e) => updateEditingPrinter(printer.id, 'status', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="Active">Activa</option>
+                            <option value="Inactive">Inactiva</option>
+                            <option value="Maintenance">Mantenimiento</option>
+                          </select>
+                        ) : (
+                          <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(printer.status)}`}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {printer.status === 'Active' ? 'Activa' : 
+                             printer.status === 'Inactive' ? 'Inactiva' : 'Mantenimiento'}
+                          </div>
+                        )}
+                      </td>
 
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <Printer className="h-8 w-8 text-gray-400 mr-3" />
-                        <div>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Printer className="h-8 w-8 text-gray-400 mr-3" />
+                          <div>
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editingPrinter.name}
+                                onChange={(e) => updateEditingPrinter(printer.id, 'name', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            ) : (
+                              <div className="text-sm font-medium text-gray-900">
+                                {printer.name}
+                              </div>
+                            )}
+                            {printer.location_details && !isEditing && (
+                              <div className="text-sm text-gray-500 flex items-center">
+                                <MapPin className="h-3 w-3 mr-1" />
+                                {printer.location_details}
+                              </div>
+                            )}
+                            {isEditing && (
+                              <input
+                                type="text"
+                                value={editingPrinter.location_details || ''}
+                                onChange={(e) => updateEditingPrinter(printer.id, 'location_details', e.target.value)}
+                                placeholder="Ubicación"
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center text-sm text-gray-900">
+                          <Wifi className="h-4 w-4 text-gray-400 mr-2" />
                           {isEditing ? (
                             <input
                               type="text"
-                              value={editingPrinter.name}
-                              onChange={(e) => updateEditingPrinter(printer.id, 'name', e.target.value)}
+                              value={editingPrinter.ip_address}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'ip_address', e.target.value)}
                               className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                           ) : (
-                            <div className="text-sm font-medium text-gray-900">
-                              {printer.name}
-                            </div>
+                            printer.ip_address
                           )}
-                          {printer.location_details && !isEditing && (
-                            <div className="text-sm text-gray-500 flex items-center">
-                              <MapPin className="h-3 w-3 mr-1" />
-                              {printer.location_details}
-                            </div>
-                          )}
-                          {isEditing && (
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center text-sm text-gray-900">
+                          <Monitor className="h-4 w-4 text-gray-400 mr-2" />
+                          {isEditing ? (
                             <input
                               type="text"
-                              value={editingPrinter.location_details || ''}
-                              onChange={(e) => updateEditingPrinter(printer.id, 'location_details', e.target.value)}
-                              placeholder="Ubicación"
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                              value={editingPrinter.model}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'model', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
+                          ) : (
+                            printer.model
                           )}
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Wifi className="h-4 w-4 text-gray-400 mr-2" />
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editingPrinter.ip_address}
-                            onChange={(e) => updateEditingPrinter(printer.id, 'ip_address', e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        ) : (
-                          printer.ip_address
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Monitor className="h-4 w-4 text-gray-400 mr-2" />
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editingPrinter.model}
-                            onChange={(e) => updateEditingPrinter(printer.id, 'model', e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        ) : (
-                          printer.model
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Building className="h-4 w-4 text-gray-400 mr-2" />
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editingPrinter.office || ''}
-                            onChange={(e) => updateEditingPrinter(printer.id, 'office', e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        ) : (
-                          printer.office || 'Sin oficina'
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Users className="h-4 w-4 text-gray-400 mr-2" />
-                        {printer.user_count} usuario{printer.user_count !== 1 ? 's' : ''}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {isEditing ? (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => savePrinter(printer.id)}
-                            disabled={updatePrinterMutation.isPending}
-                            className="text-green-600 hover:text-green-900 disabled:opacity-50"
-                            title="Guardar cambios"
-                          >
-                            <Save className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => cancelEditing(printer.id)}
-                            disabled={updatePrinterMutation.isPending}
-                            className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                            title="Cancelar"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center text-sm text-gray-900">
+                          <Building className="h-4 w-4 text-gray-400 mr-2" />
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingPrinter.office || ''}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'office', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            printer.office || 'Sin oficina'
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => {
-                              setSelectedPrinter(printer.id);
-                              setShowAssignments(true);
-                            }}
-                            className="text-blue-600 hover:text-blue-900"
-                            title="Ver asignaciones"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => startEditing(printer)}
-                            className="text-green-600 hover:text-green-900"
-                            title="Editar impresora"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center text-sm text-gray-900">
+                            <Users className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className={`font-medium ${printer.user_count > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                              {printer.user_count} usuario{printer.user_count !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          {!isEditing && printer.status === 'Active' && (
+                            <button
+                              onClick={() => setShowQuickAssign(isQuickAssigning ? null : printer.id)}
+                              className="text-blue-600 hover:text-blue-900 text-xs"
+                              title="Asignación rápida"
+                            >
+                              <UserPlus className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {isEditing ? (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => savePrinter(printer.id)}
+                              disabled={updatePrinterMutation.isPending}
+                              className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                              title="Guardar cambios"
+                            >
+                              <Save className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => cancelEditing(printer.id)}
+                              disabled={updatePrinterMutation.isPending}
+                              className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                              title="Cancelar"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => {
+                                setSelectedPrinter(printer.id);
+                                setShowAssignments(true);
+                              }}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="Gestionar asignaciones"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => startEditing(printer)}
+                              className="text-green-600 hover:text-green-900"
+                              title="Editar impresora"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Fila de asignación rápida */}
+                    {isQuickAssigning && (
+                      <tr className="bg-blue-50">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-medium text-gray-900">
+                                Asignación Rápida - {printer.name}
+                              </h4>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => setBulkAssignMode(!bulkAssignMode)}
+                                  className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                                    bulkAssignMode 
+                                      ? 'bg-purple-100 text-purple-700' 
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {bulkAssignMode ? 'Cancelar Masivo' : 'Asignación Masiva'}
+                                </button>
+                                {bulkAssignMode && selectedUsers.size > 0 && (
+                                  <button
+                                    onClick={() => handleBulkAssign(printer.id)}
+                                    disabled={bulkAssignMutation.isPending}
+                                    className="text-xs px-3 py-1 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-50"
+                                  >
+                                    Asignar {selectedUsers.size} usuarios
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="relative">
+                              <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                              <input
+                                type="text"
+                                value={assignmentSearch}
+                                onChange={(e) => setAssignmentSearch(e.target.value)}
+                                placeholder="Buscar usuarios disponibles..."
+                                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto">
+                              {getAvailableUsersForPrinter(printer.id).map((user) => (
+                                <div 
+                                  key={user.id} 
+                                  className={`p-3 border rounded-lg hover:bg-gray-50 transition-colors ${
+                                    bulkAssignMode && selectedUsers.has(user.id) 
+                                      ? 'border-purple-300 bg-purple-50' 
+                                      : 'border-gray-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                      {bulkAssignMode && (
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedUsers.has(user.id)}
+                                          onChange={() => toggleUserSelection(user.id)}
+                                          className="mr-3 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                        />
+                                      )}
+                                      <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center mr-3">
+                                        <Users className="h-4 w-4 text-gray-600" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-900">
+                                          {user.full_name || 'Sin nombre'}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          ID: {user.id} • {user.office || 'Sin oficina'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {!bulkAssignMode && (
+                                      <div className="flex space-x-1">
+                                        <button
+                                          onClick={() => handleQuickAssign(user.id, printer.id, false)}
+                                          disabled={assignUserMutation.isPending}
+                                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                          title="Asignar como usuario regular"
+                                        >
+                                          <UserCheck className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleQuickAssign(user.id, printer.id, true)}
+                                          disabled={assignUserMutation.isPending}
+                                          className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                                          title="Asignar como usuario principal"
+                                        >
+                                          <Crown className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {getAvailableUsersForPrinter(printer.id).length === 0 && (
+                              <div className="text-center py-4 text-gray-500">
+                                <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                                <p className="text-sm">No hay usuarios disponibles para asignar</p>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -778,19 +1019,20 @@ export function PrinterManagement() {
         )}
       </div>
 
-      {/* Modal de asignaciones */}
+      {/* Modal de gestión avanzada de asignaciones */}
       {showAssignments && selectedPrinter && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Gestionar Asignaciones de Usuario
+                  Gestión Avanzada de Asignaciones
                 </h3>
                 <button
                   onClick={() => {
                     setShowAssignments(false);
                     setSelectedPrinter(null);
+                    setAssignmentSearch('');
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -800,100 +1042,164 @@ export function PrinterManagement() {
             </div>
 
             <div className="p-6">
-              {/* Usuarios asignados */}
-              <div className="mb-6">
-                <h4 className="text-md font-medium text-gray-900 mb-4">
-                  Usuarios Asignados ({userAssignments?.length || 0})
-                </h4>
-                
-                {assignmentsLoading ? (
-                  <div className="animate-pulse space-y-2">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="h-12 bg-gray-200 rounded"></div>
-                    ))}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Usuarios asignados */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-4">
+                    Usuarios Asignados ({userAssignments?.length || 0})
+                  </h4>
+                  
+                  {assignmentsLoading ? (
+                    <div className="animate-pulse space-y-2">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 bg-gray-200 rounded"></div>
+                      ))}
+                    </div>
+                  ) : userAssignments && userAssignments.length > 0 ? (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {userAssignments.map((assignment) => (
+                        <div key={assignment.user_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                          <div className="flex items-center">
+                            <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                              {assignment.is_primary ? (
+                                <Crown className="h-5 w-5 text-yellow-600" />
+                              ) : (
+                                <Users className="h-5 w-5 text-blue-600" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 flex items-center">
+                                {assignment.full_name || 'Sin nombre'}
+                                {assignment.is_primary && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    <Star className="h-3 w-3 mr-1" />
+                                    Principal
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                ID: {assignment.user_id} • {assignment.office || 'Sin oficina'}
+                              </div>
+                              {assignment.notes && (
+                                <div className="text-xs text-gray-400 mt-1">
+                                  {assignment.notes}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            {!assignment.is_primary && (
+                              <button
+                                onClick={() => setPrimaryUserMutation.mutate({
+                                  userId: assignment.user_id,
+                                  printerId: selectedPrinter
+                                })}
+                                disabled={setPrimaryUserMutation.isPending}
+                                className="text-yellow-600 hover:text-yellow-900 disabled:opacity-50"
+                                title="Establecer como principal"
+                              >
+                                <Crown className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => removeAssignmentMutation.mutate({
+                                userId: assignment.user_id,
+                                printerId: selectedPrinter
+                              })}
+                              disabled={removeAssignmentMutation.isPending}
+                              className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                              title="Remover asignación"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <UserX className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p className="text-sm">No hay usuarios asignados a esta impresora</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Usuarios disponibles */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-4">
+                    Usuarios Disponibles
+                  </h4>
+                  
+                  <div className="relative mb-4">
+                    <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={assignmentSearch}
+                      onChange={(e) => setAssignmentSearch(e.target.value)}
+                      placeholder="Buscar usuarios..."
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
-                ) : userAssignments && userAssignments.length > 0 ? (
-                  <div className="space-y-2">
-                    {userAssignments.map((assignment) => (
-                      <div key={assignment.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {getAvailableUsersForPrinter(selectedPrinter).map((user) => (
+                      <div key={user.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
                         <div className="flex items-center">
-                          <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                            <Users className="h-4 w-4 text-blue-600" />
+                          <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center mr-3">
+                            <Users className="h-4 w-4 text-gray-600" />
                           </div>
                           <div>
                             <div className="text-sm font-medium text-gray-900">
-                              {assignment.full_name || 'Sin nombre'}
-                              {assignment.is_primary && (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                  Principal
-                                </span>
-                              )}
+                              {user.full_name || 'Sin nombre'}
                             </div>
                             <div className="text-sm text-gray-500">
-                              ID: {assignment.user_id} • {assignment.office || 'Sin oficina'}
+                              ID: {user.id} • {user.office || 'Sin oficina'}
                             </div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => removeAssignmentMutation.mutate({
-                            userId: assignment.user_id,
-                            printerId: selectedPrinter
-                          })}
-                          className="text-red-600 hover:text-red-900"
-                          title="Remover asignación"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => assignUserMutation.mutate({
+                              userId: user.id,
+                              printerId: selectedPrinter,
+                              isPrimary: false,
+                              notes: `Asignado desde gestión avanzada - ${new Date().toLocaleDateString()}`
+                            })}
+                            disabled={assignUserMutation.isPending}
+                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                            title="Asignar como usuario regular"
+                          >
+                            <UserCheck className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => assignUserMutation.mutate({
+                              userId: user.id,
+                              printerId: selectedPrinter,
+                              isPrimary: true,
+                              notes: `Asignado como principal - ${new Date().toLocaleDateString()}`
+                            })}
+                            disabled={assignUserMutation.isPending}
+                            className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                            title="Asignar como usuario principal"
+                          >
+                            <Crown className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-gray-500 text-sm">No hay usuarios asignados a esta impresora.</p>
-                )}
-              </div>
 
-              {/* Asignar nuevo usuario */}
-              <div>
-                <h4 className="text-md font-medium text-gray-900 mb-4">
-                  Asignar Nuevo Usuario
-                </h4>
-                
-                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
-                  {availableUsers?.filter(user => 
-                    !userAssignments?.some(assignment => assignment.user_id === user.id)
-                  ).map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center mr-3">
-                          <Users className="h-4 w-4 text-gray-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {user.full_name || 'Sin nombre'}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            ID: {user.id} • {user.office || 'Sin oficina'}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleAssignUser(user.id, false)}
-                          disabled={assignUserMutation.isPending}
-                          className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          Asignar
-                        </button>
-                        <button
-                          onClick={() => handleAssignUser(user.id, true)}
-                          disabled={assignUserMutation.isPending}
-                          className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
-                        >
-                          Principal
-                        </button>
-                      </div>
+                  {getAvailableUsersForPrinter(selectedPrinter).length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Target className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p className="text-sm">
+                        {assignmentSearch 
+                          ? 'No se encontraron usuarios con ese criterio'
+                          : 'Todos los usuarios ya están asignados'
+                        }
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
