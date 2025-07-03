@@ -55,12 +55,16 @@ interface NewPrinter {
   location_details: string;
 }
 
+interface EditingPrinter extends PrinterData {
+  isEditing: boolean;
+}
+
 export function PrinterManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOffice, setFilterOffice] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingPrinter, setEditingPrinter] = useState<string | null>(null);
+  const [editingPrinters, setEditingPrinters] = useState<{ [key: string]: EditingPrinter }>({});
   const [selectedPrinter, setSelectedPrinter] = useState<string | null>(null);
   const [showAssignments, setShowAssignments] = useState(false);
   const [newPrinter, setNewPrinter] = useState<NewPrinter>({
@@ -155,7 +159,7 @@ export function PrinterManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['printers'] });
-      setEditingPrinter(null);
+      setEditingPrinters({});
     }
   });
 
@@ -211,6 +215,52 @@ export function PrinterManagement() {
     
     return matchesSearch && matchesOffice && matchesStatus;
   }) || [];
+
+  // Funciones para manejar la edición
+  const startEditing = (printer: PrinterData) => {
+    setEditingPrinters(prev => ({
+      ...prev,
+      [printer.id]: { ...printer, isEditing: true }
+    }));
+  };
+
+  const cancelEditing = (printerId: string) => {
+    setEditingPrinters(prev => {
+      const newState = { ...prev };
+      delete newState[printerId];
+      return newState;
+    });
+  };
+
+  const savePrinter = async (printerId: string) => {
+    const editingPrinter = editingPrinters[printerId];
+    if (!editingPrinter) return;
+
+    try {
+      await updatePrinterMutation.mutateAsync({
+        id: printerId,
+        name: editingPrinter.name,
+        ip_address: editingPrinter.ip_address,
+        model: editingPrinter.model,
+        office: editingPrinter.office,
+        status: editingPrinter.status,
+        location_details: editingPrinter.location_details
+      });
+      cancelEditing(printerId);
+    } catch (error) {
+      console.error('Error updating printer:', error);
+    }
+  };
+
+  const updateEditingPrinter = (printerId: string, field: keyof PrinterData, value: string) => {
+    setEditingPrinters(prev => ({
+      ...prev,
+      [printerId]: {
+        ...prev[printerId],
+        [field]: value
+      }
+    }));
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -551,29 +601,61 @@ export function PrinterManagement() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredPrinters.map((printer) => {
                 const StatusIcon = getStatusIcon(printer.status);
+                const isEditing = editingPrinters[printer.id]?.isEditing;
+                const editingPrinter = editingPrinters[printer.id] || printer;
 
                 return (
                   <tr key={printer.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(printer.status)}`}>
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {printer.status === 'Active' ? 'Activa' : 
-                         printer.status === 'Inactive' ? 'Inactiva' : 'Mantenimiento'}
-                      </div>
+                      {isEditing ? (
+                        <select
+                          value={editingPrinter.status}
+                          onChange={(e) => updateEditingPrinter(printer.id, 'status', e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="Active">Activa</option>
+                          <option value="Inactive">Inactiva</option>
+                          <option value="Maintenance">Mantenimiento</option>
+                        </select>
+                      ) : (
+                        <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(printer.status)}`}>
+                          <StatusIcon className="h-3 w-3 mr-1" />
+                          {printer.status === 'Active' ? 'Activa' : 
+                           printer.status === 'Inactive' ? 'Inactiva' : 'Mantenimiento'}
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <Printer className="h-8 w-8 text-gray-400 mr-3" />
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {printer.name}
-                          </div>
-                          {printer.location_details && (
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingPrinter.name}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'name', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="text-sm font-medium text-gray-900">
+                              {printer.name}
+                            </div>
+                          )}
+                          {printer.location_details && !isEditing && (
                             <div className="text-sm text-gray-500 flex items-center">
                               <MapPin className="h-3 w-3 mr-1" />
                               {printer.location_details}
                             </div>
+                          )}
+                          {isEditing && (
+                            <input
+                              type="text"
+                              value={editingPrinter.location_details || ''}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'location_details', e.target.value)}
+                              placeholder="Ubicación"
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                            />
                           )}
                         </div>
                       </div>
@@ -582,21 +664,48 @@ export function PrinterManagement() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Wifi className="h-4 w-4 text-gray-400 mr-2" />
-                        {printer.ip_address}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editingPrinter.ip_address}
+                            onChange={(e) => updateEditingPrinter(printer.id, 'ip_address', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        ) : (
+                          printer.ip_address
+                        )}
                       </div>
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Monitor className="h-4 w-4 text-gray-400 mr-2" />
-                        {printer.model}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editingPrinter.model}
+                            onChange={(e) => updateEditingPrinter(printer.id, 'model', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        ) : (
+                          printer.model
+                        )}
                       </div>
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Building className="h-4 w-4 text-gray-400 mr-2" />
-                        {printer.office || 'Sin oficina'}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editingPrinter.office || ''}
+                            onChange={(e) => updateEditingPrinter(printer.id, 'office', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        ) : (
+                          printer.office || 'Sin oficina'
+                        )}
                       </div>
                     </td>
 
@@ -608,25 +717,46 @@ export function PrinterManagement() {
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedPrinter(printer.id);
-                            setShowAssignments(true);
-                          }}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Ver asignaciones"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditingPrinter(printer.id)}
-                          className="text-green-600 hover:text-green-900"
-                          title="Editar"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                      </div>
+                      {isEditing ? (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => savePrinter(printer.id)}
+                            disabled={updatePrinterMutation.isPending}
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                            title="Guardar cambios"
+                          >
+                            <Save className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => cancelEditing(printer.id)}
+                            disabled={updatePrinterMutation.isPending}
+                            className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                            title="Cancelar"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedPrinter(printer.id);
+                              setShowAssignments(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Ver asignaciones"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => startEditing(printer)}
+                            className="text-green-600 hover:text-green-900"
+                            title="Editar impresora"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
