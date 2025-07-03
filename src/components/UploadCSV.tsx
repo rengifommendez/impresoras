@@ -81,14 +81,14 @@ export function UploadCSV() {
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === ';' && !inQuotes) {
-        result.push(current.trim());
+        result.push(current.trim().replace(/^"|"$/g, '')); // Remover comillas
         current = '';
       } else {
         current += char;
       }
     }
     
-    result.push(current.trim());
+    result.push(current.trim().replace(/^"|"$/g, '')); // Remover comillas del último campo
     return result;
   };
 
@@ -97,13 +97,13 @@ export function UploadCSV() {
       // Limpiar el string de timestamp
       const cleanStr = timestampStr.replace(/\s+/g, ' ').trim();
       
-      // Intentar varios formatos de fecha
+      // Formato específico del CSV: "3/07/2025 4:48:11 p. m."
       const formats = [
-        // Formato con AM/PM: "24/06/2025 8:43:12 a. m."
+        // Formato con AM/PM: "3/07/2025 4:48:11 p. m."
         /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})\s+(a\.|p\.)\s*m\./i,
-        // Formato sin AM/PM: "24/06/2025 8:43:12"
+        // Formato sin AM/PM: "3/07/2025 4:48:11"
         /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/,
-        // Formato ISO: "2025-06-24 08:43:12"
+        // Formato ISO: "2025-07-03 16:48:11"
         /(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/
       ];
 
@@ -170,7 +170,7 @@ export function UploadCSV() {
         };
       }
 
-      // Analizar la primera línea para detectar header y estructura
+      // Analizar la primera línea para detectar header
       const firstLine = parseCSVLine(lines[0]);
       console.log('🔍 Primera línea analizada:', firstLine);
       
@@ -178,7 +178,7 @@ export function UploadCSV() {
       const hasHeader = firstLine[0]?.toLowerCase().includes('cuenta') || 
                        firstLine[0]?.toLowerCase().includes('id') ||
                        firstLine.some(col => col.toLowerCase().includes('imprimir') || 
-                                           col.toLowerCase().includes('copiar') ||
+                                           col.toLowerCase().includes('copia') ||
                                            col.toLowerCase().includes('escanear') ||
                                            col.toLowerCase().includes('fax'));
       
@@ -222,9 +222,10 @@ export function UploadCSV() {
             continue;
           }
 
-          // Extraer datos básicos
-          const userId = values[0]?.trim();
-          const accountStatus = values[1]?.trim() || 'Normal';
+          // MAPEO ESPECÍFICO PARA TU FORMATO CSV
+          // Basado en el header: ID de la cuenta;Estado de la cuenta;Imprimir (total);Imprimir (a todo color);...;Marca de tiempo
+          const userId = values[0]?.trim().replace(/^"|"$/g, ''); // Columna 0: ID de la cuenta
+          const accountStatus = values[1]?.trim().replace(/^"|"$/g, '') || 'Normal'; // Columna 1: Estado
           
           if (!userId) {
             failed++;
@@ -238,6 +239,7 @@ export function UploadCSV() {
             
             // Limpiar el valor: remover espacios, comas, puntos como separadores de miles
             let cleaned = value.trim()
+              .replace(/^"|"$/g, '') // Remover comillas
               .replace(/\s/g, '') // Remover espacios
               .replace(/,/g, ''); // Remover comas
             
@@ -258,47 +260,28 @@ export function UploadCSV() {
             return isNaN(num) ? 0 : Math.max(0, num);
           };
 
-          // MAPEO MEJORADO DE COLUMNAS - Detectar automáticamente la estructura
-          let printTotal = 0, printColor = 0, copyTotal = 0, copyColor = 0, scanTotal = 0, faxTotal = 0;
-          
-          // Estrategia 1: Mapeo por posición estándar (más común)
-          if (values.length >= 8) {
-            printTotal = parseNumber(values[2]);   // Columna 3: Total impresiones
-            printColor = parseNumber(values[3]);   // Columna 4: Impresiones color
-            copyTotal = parseNumber(values[4]);    // Columna 5: Total copias
-            copyColor = parseNumber(values[5]);    // Columna 6: Copias color
-            scanTotal = parseNumber(values[6]);    // Columna 7: Total escaneos
-            faxTotal = parseNumber(values[7]);     // Columna 8: Total fax
-          } else if (values.length >= 6) {
-            // Formato reducido
-            printTotal = parseNumber(values[2]);
-            printColor = parseNumber(values[3]);
-            copyTotal = parseNumber(values[4]);
-            scanTotal = parseNumber(values[5]);
-            faxTotal = values.length > 6 ? parseNumber(values[6]) : 0;
-          } else if (values.length >= 4) {
-            // Formato mínimo
-            printTotal = parseNumber(values[2]);
-            copyTotal = parseNumber(values[3]);
-            scanTotal = values.length > 4 ? parseNumber(values[4]) : 0;
-          } else {
-            // Solo impresiones
-            printTotal = parseNumber(values[2]);
-          }
+          // MAPEO ESPECÍFICO PARA TU CSV:
+          // Columna 2: Imprimir (total)
+          // Columna 3: Imprimir (a todo color)
+          // Columna 8: Imprimir (blanco y negro) 
+          // Columna 9: Copia (total)
+          // Columna 10: Copia (a todo color)
+          // Columna 15: Copia (blanco y negro)
+          // Columna 16: Recibir FAX
+          // Columna 17: Escanear (total)
+          // Última columna: Marca de tiempo
 
-          // Calcular valores derivados
-          const printMono = Math.max(0, printTotal - printColor);
-          const copyMono = Math.max(0, copyTotal - copyColor);
+          const printTotal = parseNumber(values[2]);        // Imprimir (total)
+          const printColor = parseNumber(values[3]);        // Imprimir (a todo color)
+          const printMono = parseNumber(values[8]);         // Imprimir (blanco y negro)
+          const copyTotal = parseNumber(values[9]);         // Copia (total)
+          const copyColor = parseNumber(values[10]);        // Copia (a todo color)
+          const copyMono = parseNumber(values[15]);         // Copia (blanco y negro)
+          const faxTotal = parseNumber(values[16]);         // Recibir FAX
+          const scanTotal = parseNumber(values[17]);        // Escanear (total)
 
-          // Extraer timestamp (última columna no vacía)
-          let timestampStr = '';
-          for (let i = values.length - 1; i >= 0; i--) {
-            if (values[i] && values[i].trim() !== '') {
-              timestampStr = values[i].trim();
-              break;
-            }
-          }
-
+          // Extraer timestamp (última columna)
+          const timestampStr = values[values.length - 1]?.trim().replace(/^"|"$/g, '') || '';
           const reportTimestamp = parseTimestamp(timestampStr);
 
           if (!reportTimestamp || isNaN(reportTimestamp.getTime())) {
@@ -320,7 +303,7 @@ export function UploadCSV() {
               scanTotal,
               faxTotal,
               timestamp: reportTimestamp.toISOString(),
-              originalLine: values
+              originalLine: values.slice(0, 10) // Solo primeras 10 columnas para debug
             });
           }
 
@@ -393,7 +376,7 @@ export function UploadCSV() {
           const year = reportTimestamp.getFullYear();
           const month = reportTimestamp.getMonth() + 1;
 
-          // Obtener datos del mes anterior para calcular diferencias - FIX: usar limit(1) en lugar de single()
+          // Obtener datos del mes anterior para calcular diferencias
           const { data: prevMonthDataArray } = await supabase
             .from('prints_monthly')
             .select('print_total, copy_total, scan_total, fax_total')
@@ -570,18 +553,16 @@ export function UploadCSV() {
   };
 
   const downloadSampleCSV = () => {
-    const sampleData = `ID de la cuenta;Estado de la cuenta;Imprimir (total);Imprimir (a todo color);Copiar (total);Copiar (a todo color);Escanear (total);Fax (total);Marca de tiempo
-0001;Normal;150;45;75;20;30;5;15/12/2024 10:30:00 a. m.
-0002;Normal;200;80;100;35;45;8;15/12/2024 10:30:00 a. m.
-0003;Normal;95;25;50;15;20;2;15/12/2024 10:30:00 a. m.
-0004;Normal;300;120;150;60;80;12;15/12/2024 10:30:00 a. m.
-0005;Normal;180;70;90;30;40;6;15/12/2024 10:30:00 a. m.`;
+    const sampleData = `ID de la cuenta;Estado de la cuenta;Imprimir (total);Imprimir (a todo color);Imprimir (a todo color) - Nivel 1;Imprimir (a todo color) - Nivel 2;Imprimir (a todo color) - Nivel 3;Imprimir (un solo color);Imprimir (blanco y negro);Copia (total);Copia (a todo color);Copia (a todo color) - Nivel 1;Copia (a todo color) - Nivel 2;Copia (a todo color) - Nivel 3;Copia (un solo color);Copia (blanco y negro);Recibir FAX;Escanear (total);Escanear (copia);Escanear (FAX);Escanear (en otro);Páginas de transmisión de FAX;Tiempo de transmisión del FAX;Marca de tiempo
+"0104";"Normal";"38";"";"";"";"";"";"38";"52";"";"";"";"";"";"52";"0";"25";"25";"0";"0";"0";"000h00m00s";"3/07/2025 4:48:11 p. m."
+"0116";"Normal";"76";"";"";"";"";"";"76";"0";"";"";"";"";"";"0";"0";"0";"0";"0";"0";"0";"000h00m00s";"3/07/2025 4:48:11 p. m."
+"0218";"Normal";"175";"";"";"";"";"";"175";"0";"";"";"";"";"";"0";"0";"0";"0";"0";"0";"0";"000h00m00s";"3/07/2025 4:48:11 p. m."`;
 
     const blob = new Blob([sampleData], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'ejemplo_impresiones.csv');
+    link.setAttribute('download', 'ejemplo_formato_real.csv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -839,39 +820,39 @@ export function UploadCSV() {
             <Info className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
             <div className="flex-1">
               <h3 className="text-sm font-medium text-gray-900 mb-2">
-                Formato Esperado del CSV
+                Formato Específico del CSV SEDCAUCA
               </h3>
               <div className="text-sm text-gray-600 space-y-2">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <p><strong>Estructura requerida:</strong></p>
+                    <p><strong>Estructura específica:</strong></p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
                       <li>Delimitador: punto y coma (;)</li>
-                      <li>Codificación: UTF-8 o latin-1</li>
-                      <li>Columna 1: ID de la cuenta</li>
-                      <li>Columna 2: Estado de la cuenta</li>
-                      <li>Columna 3: Total de impresiones</li>
-                      <li>Columna 4: Impresiones a color</li>
-                      <li>Columna 5: Total de copias</li>
-                      <li>Columna 6: Copias a color</li>
-                      <li>Columna 7: Total de escaneos</li>
-                      <li>Columna 8: Total de fax</li>
+                      <li>Columna 0: ID de la cuenta</li>
+                      <li>Columna 1: Estado de la cuenta</li>
+                      <li>Columna 2: Imprimir (total)</li>
+                      <li>Columna 3: Imprimir (a todo color)</li>
+                      <li>Columna 8: Imprimir (blanco y negro)</li>
+                      <li>Columna 9: Copia (total)</li>
+                      <li>Columna 10: Copia (a todo color)</li>
+                      <li>Columna 15: Copia (blanco y negro)</li>
+                      <li>Columna 16: Recibir FAX</li>
+                      <li>Columna 17: Escanear (total)</li>
                       <li>Última columna: Marca de tiempo</li>
                     </ul>
                   </div>
                   <div>
-                    <p><strong>Formatos de fecha aceptados:</strong></p>
+                    <p><strong>Formato de fecha:</strong></p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>3/07/2025 4:48:11 p. m.</li>
                       <li>DD/MM/YYYY HH:MM:SS a.m./p.m.</li>
-                      <li>DD/MM/YYYY HH:MM:SS</li>
-                      <li>YYYY-MM-DD HH:MM:SS</li>
                     </ul>
-                    <p className="mt-2"><strong>Notas importantes:</strong></p>
+                    <p className="mt-2"><strong>Características:</strong></p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Campos entre comillas</li>
                       <li>Campos vacíos = 0</li>
-                      <li>Se crean usuarios automáticamente</li>
-                      <li>Datos se agregan por mes</li>
-                      <li><strong>✅ Todos los tipos de datos se procesan</strong></li>
+                      <li>Usuarios se crean automáticamente</li>
+                      <li><strong>✅ Optimizado para formato SEDCAUCA</strong></li>
                     </ul>
                   </div>
                 </div>
@@ -886,18 +867,18 @@ export function UploadCSV() {
             <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 mr-3 flex-shrink-0" />
             <div>
               <h4 className="text-sm font-medium text-green-900 mb-2">
-                ✅ Procesamiento Mejorado de Datos
+                ✅ Procesamiento Optimizado para SEDCAUCA
               </h4>
               <p className="text-sm text-green-700">
-                <strong>El sistema ahora procesa correctamente todos los tipos de datos:</strong>
+                <strong>El sistema está configurado específicamente para el formato de CSV de SEDCAUCA:</strong>
               </p>
               <ul className="text-sm text-green-700 list-disc list-inside mt-2 space-y-1">
-                <li><strong>Impresiones:</strong> Total y separación color/monocromo</li>
-                <li><strong>Copias:</strong> Total y separación color/monocromo</li>
-                <li><strong>Escaneos:</strong> Conteo total de documentos escaneados</li>
-                <li><strong>Fax:</strong> Conteo total de faxes enviados/recibidos</li>
-                <li><strong>Detección automática:</strong> Adapta el formato del CSV automáticamente</li>
-                <li><strong>Validación mejorada:</strong> Manejo robusto de números y formatos</li>
+                <li><strong>Mapeo exacto:</strong> Columnas específicas para cada tipo de dato</li>
+                <li><strong>Impresiones:</strong> Total, color y blanco/negro por separado</li>
+                <li><strong>Copias:</strong> Total, color y blanco/negro por separado</li>
+                <li><strong>Escaneos y Fax:</strong> Conteos totales precisos</li>
+                <li><strong>Timestamps:</strong> Formato DD/MM/YYYY con AM/PM</li>
+                <li><strong>IDs de usuario:</strong> Manejo de formatos variados (0104, 1510, Other, etc.)</li>
               </ul>
             </div>
           </div>
@@ -910,10 +891,10 @@ export function UploadCSV() {
               <File className="h-5 w-5 text-gray-500 mt-0.5 mr-3 flex-shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-gray-900 mb-2">
-                  Archivo CSV de Ejemplo
+                  Archivo CSV de Ejemplo (Formato SEDCAUCA)
                 </h4>
                 <p className="text-sm text-gray-700">
-                  Descargue un archivo CSV de ejemplo con el formato correcto para probar la importación.
+                  Descargue un archivo CSV de ejemplo con el formato exacto de SEDCAUCA para verificar compatibilidad.
                 </p>
               </div>
             </div>
