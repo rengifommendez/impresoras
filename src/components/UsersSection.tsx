@@ -53,18 +53,27 @@ export function UsersSection() {
   const { data: usersWithActivity, isLoading: usersLoading } = useQuery({
     queryKey: ['users-with-activity'],
     queryFn: async () => {
-      // Primero obtener todos los usuarios
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .order('id');
-      
-      if (usersError) throw usersError;
-
-      // Luego obtener totales por usuario usando la función helper
       try {
+        console.log('🔍 Obteniendo usuarios con actividad...');
+        
+        // Primero obtener todos los usuarios
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('*')
+          .order('id');
+        
+        if (usersError) {
+          console.error('Error obteniendo usuarios:', usersError);
+          throw usersError;
+        }
+
+        console.log(`👥 Usuarios encontrados: ${users?.length || 0}`);
+
+        // Luego obtener totales por usuario usando la función helper
         const userTotals = await getTotalByUser();
         
+        console.log(`📊 Totales obtenidos para ${userTotals?.length || 0} usuarios`);
+
         // Combinar datos de usuarios con totales
         const usersWithTotals = users.map(user => {
           const userTotal = userTotals?.find((ut: any) => ut.user_id === user.id);
@@ -79,19 +88,13 @@ export function UsersSection() {
           };
         });
 
+        console.log('✅ Datos combinados exitosamente');
+        console.log('📈 Muestra de usuarios con actividad:', usersWithTotals.slice(0, 3));
+
         return usersWithTotals as UserWithActivity[];
       } catch (error) {
-        console.warn('Error getting user totals, using fallback:', error);
-        // Fallback: devolver usuarios sin actividad
-        return users.map(user => ({
-          ...user,
-          total_prints: 0,
-          total_copies: 0,
-          total_scans: 0,
-          total_fax: 0,
-          last_activity: null,
-          months_active: 0
-        })) as UserWithActivity[];
+        console.error('💥 Error obteniendo usuarios con actividad:', error);
+        throw error;
       }
     },
   });
