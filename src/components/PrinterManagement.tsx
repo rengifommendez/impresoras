@@ -182,7 +182,8 @@ export function PrinterManagement() {
   });
 
   const updatePrinterMutation = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<Printer> & { id: string }) => {
+    mutationFn: async ({ id, isEditing, ...updates }: Partial<EditingPrinter> & { id: string }) => {
+      // Remove isEditing from the updates object before sending to Supabase
       const { error } = await supabase
         .from('printers')
         .update(updates)
