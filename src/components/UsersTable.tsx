@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Activity, Printer, Copy, Scan, Send, Building } from 'lucide-react';
+import { User, Activity, Printer, Copy, Scan, Send, Building, Calendar } from 'lucide-react';
 import { UserTotal } from '../lib/supabase';
 
 interface UsersTableProps {
