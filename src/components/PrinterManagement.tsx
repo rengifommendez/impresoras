@@ -20,7 +20,8 @@ import {
   Activity,
   Eye,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -65,10 +66,14 @@ interface NewPrinter {
   location_details: string;
 }
 
+interface EditingPrinter extends Printer {
+  isEditing: boolean;
+}
+
 export function PrinterManagement() {
   const { isAdmin } = useAuth();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingPrinter, setEditingPrinter] = useState<string | null>(null);
+  const [editingPrinters, setEditingPrinters] = useState<{ [key: string]: EditingPrinter }>({});
   const [selectedPrinter, setSelectedPrinter] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOffice, setFilterOffice] = useState('');
@@ -187,7 +192,7 @@ export function PrinterManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['printers'] });
-      setEditingPrinter(null);
+      setEditingPrinters({});
     }
   });
 
@@ -223,6 +228,20 @@ export function PrinterManagement() {
       setUserSearchTerm('');
       setUserFilterOffice('');
       setShowOnlySelectedOffice(false);
+    }
+  });
+
+  const removeUserAssignmentMutation = useMutation({
+    mutationFn: async ({ assignmentId }: { assignmentId: string }) => {
+      const { error } = await supabase
+        .from('user_printer_assignments')
+        .delete()
+        .eq('id', assignmentId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['printer-assignments'] });
     }
   });
 
@@ -263,6 +282,43 @@ export function PrinterManagement() {
   // Obtener usuarios asignados a una impresora
   const getUsersForPrinter = (printerId: string) => {
     return assignments?.filter(a => a.printer_id === printerId) || [];
+  };
+
+  // Funciones de edición de impresoras
+  const startEditingPrinter = (printer: Printer) => {
+    setEditingPrinters(prev => ({
+      ...prev,
+      [printer.id]: { ...printer, isEditing: true }
+    }));
+  };
+
+  const cancelEditingPrinter = (printerId: string) => {
+    setEditingPrinters(prev => {
+      const newState = { ...prev };
+      delete newState[printerId];
+      return newState;
+    });
+  };
+
+  const savePrinter = async (printerId: string) => {
+    const editingPrinter = editingPrinters[printerId];
+    if (!editingPrinter) return;
+
+    try {
+      await updatePrinterMutation.mutateAsync(editingPrinter);
+    } catch (error) {
+      console.error('Error updating printer:', error);
+    }
+  };
+
+  const updateEditingPrinter = (printerId: string, field: keyof Printer, value: string) => {
+    setEditingPrinters(prev => ({
+      ...prev,
+      [printerId]: {
+        ...prev[printerId],
+        [field]: value
+      }
+    }));
   };
 
   // Manejar selección de usuarios
@@ -312,6 +368,16 @@ export function PrinterManagement() {
     if (printer?.office) {
       setUserFilterOffice(printer.office);
       setShowOnlySelectedOffice(true);
+    }
+  };
+
+  const removeUserFromPrinter = async (assignmentId: string) => {
+    if (confirm('¿Está seguro de que desea quitar este usuario de la impresora?')) {
+      try {
+        await removeUserAssignmentMutation.mutateAsync({ assignmentId });
+      } catch (error) {
+        console.error('Error removing user assignment:', error);
+      }
     }
   };
 
@@ -522,7 +588,7 @@ export function PrinterManagement() {
                   Oficina
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Usuarios
+                  Usuarios Asignados
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Acciones
@@ -533,6 +599,8 @@ export function PrinterManagement() {
               {filteredPrinters.map((printer) => {
                 const StatusIcon = getStatusIcon(printer.status);
                 const assignedUsers = getUsersForPrinter(printer.id);
+                const isEditing = editingPrinters[printer.id]?.isEditing;
+                const editingPrinter = editingPrinters[printer.id] || printer;
 
                 return (
                   <tr key={printer.id} className="hover:bg-gray-50">
@@ -548,13 +616,31 @@ export function PrinterManagement() {
                       <div className="flex items-center">
                         <Monitor className="h-5 w-5 text-gray-400 mr-3" />
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {printer.name}
-                          </div>
-                          {printer.location_details && (
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingPrinter.name}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'name', e.target.value)}
+                              className="text-sm font-medium text-gray-900 border border-gray-300 rounded px-2 py-1 w-full"
+                            />
+                          ) : (
+                            <div className="text-sm font-medium text-gray-900">
+                              {printer.name}
+                            </div>
+                          )}
+                          {printer.location_details && !isEditing && (
                             <div className="text-sm text-gray-500">
                               {printer.location_details}
                             </div>
+                          )}
+                          {isEditing && (
+                            <input
+                              type="text"
+                              value={editingPrinter.location_details || ''}
+                              onChange={(e) => updateEditingPrinter(printer.id, 'location_details', e.target.value)}
+                              placeholder="Detalles de ubicación"
+                              className="text-sm text-gray-500 border border-gray-300 rounded px-2 py-1 w-full mt-1"
+                            />
                           )}
                         </div>
                       </div>
@@ -563,18 +649,45 @@ export function PrinterManagement() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Wifi className="h-4 w-4 text-gray-400 mr-2" />
-                        {printer.ip_address}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editingPrinter.ip_address}
+                            onChange={(e) => updateEditingPrinter(printer.id, 'ip_address', e.target.value)}
+                            className="border border-gray-300 rounded px-2 py-1"
+                          />
+                        ) : (
+                          printer.ip_address
+                        )}
                       </div>
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {printer.model}
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editingPrinter.model}
+                          onChange={(e) => updateEditingPrinter(printer.id, 'model', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 w-full"
+                        />
+                      ) : (
+                        printer.model
+                      )}
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Building className="h-4 w-4 text-gray-400 mr-2" />
-                        {printer.office}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editingPrinter.office}
+                            onChange={(e) => updateEditingPrinter(printer.id, 'office', e.target.value)}
+                            className="border border-gray-300 rounded px-2 py-1"
+                          />
+                        ) : (
+                          printer.office
+                        )}
                       </div>
                     </td>
 
@@ -583,26 +696,83 @@ export function PrinterManagement() {
                         <Users className="h-4 w-4 text-gray-400 mr-2" />
                         <span className="font-medium">{assignedUsers.length}</span>
                         <span className="text-gray-500 ml-1">usuarios</span>
+                        {assignedUsers.length > 0 && (
+                          <div className="ml-2">
+                            <button
+                              onClick={() => setSelectedPrinter(selectedPrinter === printer.id ? null : printer.id)}
+                              className="text-blue-600 hover:text-blue-800 text-xs"
+                            >
+                              {selectedPrinter === printer.id ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
+                      
+                      {/* Lista expandible de usuarios asignados */}
+                      {selectedPrinter === printer.id && assignedUsers.length > 0 && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded border">
+                          <div className="space-y-1">
+                            {assignedUsers.map((assignment) => (
+                              <div key={assignment.id} className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700">
+                                  {assignment.user?.full_name || assignment.user_id}
+                                </span>
+                                <button
+                                  onClick={() => removeUserFromPrinter(assignment.id)}
+                                  className="text-red-600 hover:text-red-800 ml-2"
+                                  title="Quitar usuario"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => startUserAssignment(printer.id)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Asignar usuarios"
-                        >
-                          <UserPlus className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditingPrinter(printer.id)}
-                          className="text-gray-600 hover:text-gray-900"
-                          title="Editar impresora"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                      </div>
+                      {isEditing ? (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => savePrinter(printer.id)}
+                            disabled={updatePrinterMutation.isPending}
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                            title="Guardar cambios"
+                          >
+                            <Save className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => cancelEditingPrinter(printer.id)}
+                            disabled={updatePrinterMutation.isPending}
+                            className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                            title="Cancelar edición"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => startUserAssignment(printer.id)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Gestionar usuarios asignados"
+                          >
+                            <UserPlus className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => startEditingPrinter(printer)}
+                            className="text-gray-600 hover:text-gray-900"
+                            title="Editar impresora"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -631,7 +801,7 @@ export function PrinterManagement() {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Asignar Usuarios a Impresora
+                  Gestionar Usuarios Asignados
                 </h3>
                 <button
                   onClick={() => {
@@ -834,10 +1004,10 @@ export function PrinterManagement() {
                   {assignUsersMutation.isPending ? (
                     <div className="flex items-center">
                       <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                      Asignando...
+                      Guardando...
                     </div>
                   ) : (
-                    `Asignar ${selectedUsers.size} usuarios`
+                    `Guardar Asignaciones (${selectedUsers.size})`
                   )}
                 </button>
               </div>
