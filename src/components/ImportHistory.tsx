@@ -32,6 +32,7 @@ interface ImportLogEntry {
   error_details: any;
   imported_by: string | null;
   importer_email?: string;
+  importer_name?: string;
 }
 
 interface ImportStats {
@@ -51,21 +52,64 @@ export function ImportHistory() {
   const [selectedImport, setSelectedImport] = useState<ImportLogEntry | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
-  // Query para obtener historial de importaciones
+  // Query para obtener historial de importaciones con información del usuario
   const { data: importHistory, isLoading: historyLoading, refetch } = useQuery({
     queryKey: ['import-history'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Obtener logs de importación
+      const { data: logs, error: logsError } = await supabase
         .from('import_log')
         .select('*')
         .order('imported_at', { ascending: false });
       
-      if (error) throw error;
+      if (logsError) throw logsError;
+
+      // Obtener información de usuarios que han importado
+      const importerIds = [...new Set(logs.map(log => log.imported_by).filter(Boolean))];
       
-      return data.map(item => ({
-        ...item,
-        importer_email: 'Sistema' // Since we can't join with auth.users, we'll show 'Sistema' for all
-      })) as ImportLogEntry[];
+      let importersMap = new Map();
+      
+      if (importerIds.length > 0) {
+        // Obtener usuarios de la tabla auth.users (solo los que han importado)
+        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+        
+        if (!authError && authUsers?.users) {
+          authUsers.users.forEach(user => {
+            if (importerIds.includes(user.id)) {
+              importersMap.set(user.id, {
+                email: user.email,
+                name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario'
+              });
+            }
+          });
+        }
+
+        // También buscar en la tabla users local
+        const { data: localUsers, error: localError } = await supabase
+          .from('users')
+          .select('id, email, full_name')
+          .in('id', importerIds);
+        
+        if (!localError && localUsers) {
+          localUsers.forEach(user => {
+            if (!importersMap.has(user.id)) {
+              importersMap.set(user.id, {
+                email: user.email || 'Sin email',
+                name: user.full_name || user.email?.split('@')[0] || 'Usuario'
+              });
+            }
+          });
+        }
+      }
+      
+      return logs.map(item => {
+        const importerInfo = importersMap.get(item.imported_by);
+        return {
+          ...item,
+          importer_email: importerInfo?.email || 'Sistema',
+          importer_name: importerInfo?.name || 'Sistema'
+        };
+      }) as ImportLogEntry[];
     },
   });
 
@@ -105,7 +149,8 @@ export function ImportHistory() {
     const matchesSearch = !searchTerm || 
       item.file_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.batch_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.importer_email && item.importer_email.toLowerCase().includes(searchTerm.toLowerCase()));
+      (item.importer_email && item.importer_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.importer_name && item.importer_name.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (!matchesSearch) return false;
 
@@ -137,7 +182,8 @@ export function ImportHistory() {
       'Registros Exitosos',
       'Registros Fallidos',
       'Tasa de Éxito (%)',
-      'Importado Por',
+      'Importado Por (Nombre)',
+      'Importado Por (Email)',
       'ID de Lote'
     ];
 
@@ -150,6 +196,7 @@ export function ImportHistory() {
         item.rows_success,
         item.rows_failed,
         item.rows_processed > 0 ? ((item.rows_success / item.rows_processed) * 100).toFixed(1) : '0',
+        `"${item.importer_name || 'Sistema'}"`,
         `"${item.importer_email || 'Sistema'}"`,
         `"${item.batch_id}"`
       ].join(','))
@@ -202,7 +249,7 @@ export function ImportHistory() {
               Historial de Importaciones CSV
             </h2>
             <p className="text-gray-600">
-              Registro completo de todas las importaciones realizadas en el sistema
+              Registro completo de todas las importaciones realizadas en el sistema con información del usuario
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -288,7 +335,7 @@ export function ImportHistory() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Archivo, lote o usuario..."
+                placeholder="Archivo, lote, usuario..."
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -434,7 +481,14 @@ export function ImportHistory() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <User className="h-4 w-4 text-gray-400 mr-2" />
-                        {item.importer_email || 'Sistema'}
+                        <div>
+                          <div className="font-medium">
+                            {item.importer_name || 'Sistema'}
+                          </div>
+                          <div className="text-gray-500 text-xs">
+                            {item.importer_email || 'Sistema'}
+                          </div>
+                        </div>
                       </div>
                     </td>
 
@@ -512,9 +566,25 @@ export function ImportHistory() {
                         {format(new Date(selectedImport.imported_at), 'dd/MM/yyyy HH:mm:ss', { locale: es })}
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">
+                    Usuario que Importó
+                  </h4>
+                  <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-gray-500">Importado por:</span>
+                      <span className="text-gray-500">Nombre:</span>
+                      <span className="ml-2 font-medium">{selectedImport.importer_name || 'Sistema'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Email:</span>
                       <span className="ml-2">{selectedImport.importer_email || 'Sistema'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">ID Usuario:</span>
+                      <span className="ml-2 font-mono text-xs">{selectedImport.imported_by || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
