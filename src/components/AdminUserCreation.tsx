@@ -52,58 +52,34 @@ export function AdminUserCreation() {
 
   const queryClient = useQueryClient();
 
-  // Mutation para crear usuario
+  // Mutation para crear usuario usando Edge Function
   const createUserMutation = useMutation({
     mutationFn: async (userData: NewUser): Promise<CreateUserResult> => {
       try {
-        // 1. Crear usuario en Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: userData.email,
-          password: userData.password,
-          email_confirm: true, // Auto-confirmar email
-          user_metadata: {
-            full_name: userData.full_name,
-            role: userData.role,
-            office: userData.office,
-            department: userData.department
-          }
+        // Get current session for authorization
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session?.access_token) {
+          throw new Error('No hay sesión activa');
+        }
+
+        // Call the Edge Function
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(userData)
         });
 
-        if (authError) {
-          throw new Error(`Error creando usuario en Auth: ${authError.message}`);
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || `HTTP error! status: ${response.status}`);
         }
 
-        if (!authData.user) {
-          throw new Error('No se pudo crear el usuario en Auth');
-        }
-
-        // 2. Crear entrada en la tabla users usando el ID de Auth
-        const { error: userError } = await supabase
-          .from('users')
-          .insert({
-            id: userData.id || authData.user.id, // Usar ID personalizado o el de Auth
-            email: userData.email,
-            full_name: userData.full_name,
-            office: userData.office,
-            department: userData.department,
-            status: userData.status
-          });
-
-        if (userError) {
-          // Si falla la inserción en users, intentar eliminar el usuario de Auth
-          try {
-            await supabase.auth.admin.deleteUser(authData.user.id);
-          } catch (cleanupError) {
-            console.error('Error limpiando usuario de Auth:', cleanupError);
-          }
-          throw new Error(`Error creando entrada en tabla users: ${userError.message}`);
-        }
-
-        return {
-          success: true,
-          message: `✅ Usuario ${userData.role === 'admin' ? 'administrador' : ''} creado exitosamente: ${userData.full_name}`,
-          userId: authData.user.id
-        };
+        return result;
 
       } catch (error) {
         console.error('Error creando usuario:', error);
