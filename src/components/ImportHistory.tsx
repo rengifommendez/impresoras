@@ -70,21 +70,7 @@ export function ImportHistory() {
       let importersMap = new Map();
       
       if (importerIds.length > 0) {
-        // Obtener usuarios de la tabla auth.users (solo los que han importado)
-        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-        
-        if (!authError && authUsers?.users) {
-          authUsers.users.forEach(user => {
-            if (importerIds.includes(user.id)) {
-              importersMap.set(user.id, {
-                email: user.email,
-                name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario'
-              });
-            }
-          });
-        }
-
-        // También buscar en la tabla users local
+        // Buscar en la tabla users local
         const { data: localUsers, error: localError } = await supabase
           .from('users')
           .select('id, email, full_name')
@@ -92,12 +78,10 @@ export function ImportHistory() {
         
         if (!localError && localUsers) {
           localUsers.forEach(user => {
-            if (!importersMap.has(user.id)) {
-              importersMap.set(user.id, {
-                email: user.email || 'Sin email',
-                name: user.full_name || user.email?.split('@')[0] || 'Usuario'
-              });
-            }
+            importersMap.set(user.id, {
+              email: user.email || 'Sin email',
+              name: user.full_name || user.email?.split('@')[0] || 'Usuario'
+            });
           });
         }
       }
