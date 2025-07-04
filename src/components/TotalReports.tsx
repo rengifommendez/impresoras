@@ -775,7 +775,7 @@ export function TotalReports() {
               </h4>
               <div className="text-sm text-blue-700 space-y-1">
                 <p>
-                  <strong>Período:</strong> {format(new Date(globalTotals.period_start), 'dd/MM/yyyy', { locale: es })}  {format(new Date(globalTotals.period_end), \'dd/MM/yyyy', { locale: es })}
+                  <strong>Período:</strong> {format(new Date(globalTotals.period_start), 'dd/MM/yyyy', { locale: es })} - {format(new Date(globalTotals.period_end), 'dd/MM/yyyy', { locale: es })}
                 </p>
                 <p>
                   <strong>Filtros aplicados:</strong> {filters.office ? `Oficina: ${filters.office}` : 'Todas las oficinas'} 
