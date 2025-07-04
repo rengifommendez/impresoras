@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { User, Session, AuthApiError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import * as auth from '../lib/auth';
 
@@ -11,10 +11,32 @@ export function useAuth() {
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          // Handle invalid refresh token errors
+          if (error instanceof AuthApiError && error.message.includes('refresh_token_not_found')) {
+            // Clear invalid session data
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+          } else {
+            console.error('Session retrieval error:', error);
+          }
+        } else {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
+      } catch (error) {
+        console.error('Unexpected error during session initialization:', error);
+        // Clear potentially corrupted session data
+        await supabase.auth.signOut();
+        setSession(null);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
     getInitialSession();
@@ -22,8 +44,11 @@ export function useAuth() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+        // Only update state for valid sessions or explicit sign out events
+        if (session || event === 'SIGNED_OUT') {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
         setLoading(false);
       }
     );
