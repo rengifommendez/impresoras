@@ -88,37 +88,48 @@ export function TotalReports() {
     includeInactive: false
   });
 
-  // Calcular rango de fechas
+  // Calcular rango de fechas - CORREGIDO
   const getDateRange = () => {
     const now = new Date();
     let start: Date;
-    let end: Date = now;
+    let end: Date;
     
     switch (filters.dateRange) {
       case 'all':
-        start = new Date('2020-01-01');
+        // Para "todos los datos", usar desde hace 5 años hasta ahora
+        start = new Date(now.getFullYear() - 5, 0, 1);
+        end = now;
         break;
+        
       case 'current_year':
         start = startOfYear(now);
         end = endOfYear(now);
         break;
+        
       case 'last_year':
         const lastYear = new Date(now.getFullYear() - 1, 0, 1);
         start = startOfYear(lastYear);
         end = endOfYear(lastYear);
         break;
+        
       case 'last_6_months':
-        start = subMonths(now, 6);
+        start = startOfMonth(subMonths(now, 6));
+        end = endOfMonth(now);
         break;
+        
       case 'last_3_months':
-        start = subMonths(now, 3);
+        start = startOfMonth(subMonths(now, 3));
+        end = endOfMonth(now);
         break;
+        
       case 'custom':
-        start = filters.startDate ? new Date(filters.startDate) : subMonths(now, 6);
-        end = filters.endDate ? new Date(filters.endDate) : now;
+        start = filters.startDate ? startOfMonth(new Date(filters.startDate)) : startOfMonth(subMonths(now, 6));
+        end = filters.endDate ? endOfMonth(new Date(filters.endDate)) : endOfMonth(now);
         break;
+        
       default:
         start = startOfYear(now);
+        end = endOfYear(now);
     }
     
     return { start, end };
@@ -130,6 +141,13 @@ export function TotalReports() {
   const { data: globalTotals, isLoading: totalsLoading } = useQuery({
     queryKey: ['global-totals', dateRange, filters.office, filters.includeInactive],
     queryFn: async () => {
+      console.log('🔍 Obteniendo totales globales para período:', {
+        start: dateRange.start.toISOString(),
+        end: dateRange.end.toISOString(),
+        office: filters.office,
+        includeInactive: filters.includeInactive
+      });
+
       // Construir query base
       let query = supabase
         .from('prints_monthly')
@@ -161,7 +179,12 @@ export function TotalReports() {
       }
 
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        console.error('Error obteniendo datos:', error);
+        throw error;
+      }
+
+      console.log(`📊 Datos obtenidos: ${data?.length || 0} registros`);
 
       // Calcular totales
       const totalPrints = data.reduce((sum, row) => sum + (row.print_total || 0), 0);
@@ -187,7 +210,7 @@ export function TotalReports() {
       );
       const avgPerMonth = monthsDiff > 0 ? totalOperations / monthsDiff : 0;
 
-      return {
+      const result = {
         total_users: totalUsers,
         active_users: activeUsers,
         total_prints: totalPrints,
@@ -200,6 +223,9 @@ export function TotalReports() {
         avg_per_user: avgPerUser,
         avg_per_month: avgPerMonth
       } as GlobalTotals;
+
+      console.log('✅ Totales calculados:', result);
+      return result;
     },
   });
 
@@ -749,8 +775,7 @@ export function TotalReports() {
               </h4>
               <div className="text-sm text-blue-700 space-y-1">
                 <p>
-                  <strong>Período:</strong> {format(new Date(globalTotals.period_start), 'dd/MM/yyyy', { locale: es })} 
-                  {format(new Date(globalTotals.period_end), 'dd/MM/yyyy', { locale: es })}
+                  <strong>Período:</strong> {format(new Date(globalTotals.period_start), 'dd/MM/yyyy', { locale: es })} - {format(new Date(globalTotals.period_end), 'dd/MM/yyyy', { locale: es })}
                 </p>
                 <p>
                   <strong>Filtros aplicados:</strong> {filters.office ? `Oficina: ${filters.office}` : 'Todas las oficinas'} 
