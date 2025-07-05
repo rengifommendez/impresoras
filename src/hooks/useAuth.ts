@@ -15,8 +15,14 @@ export function useAuth() {
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          // Handle invalid refresh token errors
-          if (error instanceof AuthApiError && error.message.includes('refresh_token_not_found')) {
+          // Handle invalid refresh token errors with more robust checking
+          const isRefreshTokenError = 
+            (error instanceof AuthApiError && error.message.includes('refresh_token_not_found')) ||
+            error.name === 'AuthApiError' && error.message.includes('refresh_token_not_found') ||
+            error.message.includes('refresh_token_not_found') ||
+            error.message.includes('Invalid Refresh Token');
+          
+          if (isRefreshTokenError) {
             // Clear invalid session data
             await supabase.auth.signOut();
             setSession(null);
