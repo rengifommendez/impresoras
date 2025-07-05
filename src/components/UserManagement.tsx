@@ -15,12 +15,10 @@ import {
   Mail,
   Phone,
   MapPin,
-  UserPlus,
   Shield,
   Settings
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { AdminUserCreation } from './AdminUserCreation';
 import { AdminManagement } from './AdminManagement';
 
 interface UserData {
@@ -50,7 +48,7 @@ export function UserManagement() {
   const [filterOffice, setFilterOffice] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [editingUsers, setEditingUsers] = useState<{ [key: string]: EditingUser }>({});
-  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'admins'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'admins'>('list');
   
   const queryClient = useQueryClient();
 
@@ -203,7 +201,6 @@ export function UserManagement() {
 
   const tabs = [
     { id: 'list', name: 'Lista de Usuarios', icon: Users },
-    { id: 'create', name: 'Crear Usuario', icon: UserPlus },
     { id: 'admins', name: 'Administradores', icon: Shield }
   ];
 
@@ -230,7 +227,7 @@ export function UserManagement() {
               Gestión de Usuarios
             </h2>
             <p className="text-gray-600">
-              Administrar usuarios del sistema y crear nuevas cuentas
+              Administrar usuarios del sistema y gestionar administradores
             </p>
           </div>
         </div>
@@ -317,9 +314,7 @@ export function UserManagement() {
       </div>
 
       {/* Contenido de las tabs */}
-      {activeTab === 'create' ? (
-        <AdminUserCreation />
-      ) : activeTab === 'admins' ? (
+      {activeTab === 'admins' ? (
         <AdminManagement />
       ) : (
         <>
@@ -385,6 +380,24 @@ export function UserManagement() {
                 >
                   Limpiar Filtros
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Información sobre usuarios regulares */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <Users className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-medium text-blue-900 mb-2">
+                  Información sobre Usuarios Regulares
+                </h4>
+                <div className="text-sm text-blue-700 space-y-1">
+                  <p>• <strong>Los usuarios regulares se crean automáticamente</strong> durante la importación de archivos CSV</p>
+                  <p>• <strong>Puedes editar la información</strong> de usuarios existentes (nombre, email, oficina, departamento)</p>
+                  <p>• <strong>Para crear administradores</strong> usa la pestaña "Administradores"</p>
+                  <p>• <strong>Los usuarios aparecen aquí</strong> después de la primera importación de datos</p>
+                </div>
               </div>
             </div>
           </div>
@@ -563,7 +576,10 @@ export function UserManagement() {
                   No se encontraron usuarios
                 </h3>
                 <p className="text-gray-600">
-                  Ajusta los filtros para ver más resultados.
+                  {users?.length === 0 
+                    ? 'Los usuarios aparecerán aquí después de la primera importación de CSV.'
+                    : 'Ajusta los filtros para ver más resultados.'
+                  }
                 </p>
               </div>
             )}
