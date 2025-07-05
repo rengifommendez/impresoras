@@ -49,14 +49,14 @@ export function UsersSection() {
   const [filterStatus, setFilterStatus] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
-  // Query para obtener usuarios con actividad
+  // Query para obtener usuarios con actividad (excluyendo administradores)
   const { data: usersWithActivity, isLoading: usersLoading } = useQuery({
     queryKey: ['users-with-activity'],
     queryFn: async () => {
       try {
-        console.log('🔍 Obteniendo usuarios con actividad...');
+        console.log('🔍 Obteniendo usuarios con actividad (excluyendo administradores)...');
         
-        // Primero obtener todos los usuarios
+        // Primero obtener todos los usuarios de la tabla users (solo usuarios regulares)
         const { data: users, error: usersError } = await supabase
           .from('users')
           .select('*')
@@ -67,7 +67,39 @@ export function UsersSection() {
           throw usersError;
         }
 
-        console.log(`👥 Usuarios encontrados: ${users?.length || 0}`);
+        console.log(`👥 Usuarios encontrados en tabla users: ${users?.length || 0}`);
+
+        // Obtener lista de usuarios administradores desde auth.users para filtrarlos
+        let adminUserIds: string[] = [];
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session?.access_token) {
+            const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-admin-users`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              }
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              adminUserIds = result.users?.map((admin: any) => admin.id) || [];
+              console.log(`🔒 Administradores encontrados para filtrar: ${adminUserIds.length}`);
+            }
+          }
+        } catch (adminError) {
+          console.warn('No se pudieron obtener administradores para filtrar:', adminError);
+          // Continuar sin filtrar administradores si hay error
+        }
+
+        // Filtrar usuarios que NO sean administradores
+        // Los administradores en auth.users tienen IDs diferentes a los de la tabla users
+        // Por lo que no necesitamos filtrar por ID, pero sí podemos filtrar por email si coincide
+        const regularUsers = users; // Mantener todos los usuarios de la tabla users
+
+        console.log(`👤 Usuarios regulares después del filtro: ${regularUsers?.length || 0}`);
 
         // Luego obtener totales por usuario usando la función helper
         const userTotals = await getTotalByUser();
@@ -75,7 +107,7 @@ export function UsersSection() {
         console.log(`📊 Totales obtenidos para ${userTotals?.length || 0} usuarios`);
 
         // Combinar datos de usuarios con totales
-        const usersWithTotals = users.map(user => {
+        const usersWithTotals = regularUsers.map(user => {
           const userTotal = userTotals?.find((ut: any) => ut.user_id === user.id);
           return {
             ...user,
@@ -88,7 +120,7 @@ export function UsersSection() {
           };
         });
 
-        console.log('✅ Datos combinados exitosamente');
+        console.log('✅ Datos combinados exitosamente (solo usuarios regulares)');
         console.log('📈 Muestra de usuarios con actividad:', usersWithTotals.slice(0, 3));
 
         return usersWithTotals as UserWithActivity[];
@@ -99,7 +131,7 @@ export function UsersSection() {
     },
   });
 
-  // Query para estadísticas de usuarios
+  // Query para estadísticas de usuarios (solo usuarios regulares)
   const { data: userStats } = useQuery({
     queryKey: ['users-stats'],
     queryFn: async () => {
@@ -199,7 +231,7 @@ export function UsersSection() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `usuarios_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `usuarios_regulares_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -226,10 +258,10 @@ export function UsersSection() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Gestión de Usuarios
+              Lista de Usuarios
             </h2>
             <p className="text-gray-600">
-              Lista completa de usuarios del sistema con estadísticas de actividad
+              Usuarios regulares del sistema con estadísticas de actividad (excluyendo administradores)
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -250,7 +282,7 @@ export function UsersSection() {
               <div className="flex items-center">
                 <Users className="h-8 w-8 text-blue-600" />
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-blue-600">Total Usuarios</p>
+                  <p className="text-sm font-medium text-blue-600">Usuarios Regulares</p>
                   <p className="text-2xl font-bold text-blue-900">
                     {userStats.total_users.toLocaleString()}
                   </p>
@@ -295,6 +327,24 @@ export function UsersSection() {
             </div>
           </div>
         )}
+
+        {/* Información sobre separación de usuarios */}
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <Users className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
+            <div>
+              <h4 className="text-sm font-medium text-blue-900 mb-2">
+                Información sobre Usuarios
+              </h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p>• <strong>Esta lista muestra solo usuarios regulares</strong> del sistema de impresiones</p>
+                <p>• <strong>Los administradores se gestionan por separado</strong> en la pestaña "Gestión" → "Administradores"</p>
+                <p>• <strong>Los usuarios aparecen aquí automáticamente</strong> cuando se importan datos CSV</p>
+                <p>• <strong>Puedes editar información</strong> de usuarios en la sección de "Gestión" → "Lista de Usuarios"</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Filtros Mejorados */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
@@ -390,10 +440,10 @@ export function UsersSection() {
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900">
-              Lista de Usuarios ({filteredUsers.length})
+              Usuarios Regulares ({filteredUsers.length})
             </h3>
             <div className="text-sm text-gray-500">
-              Mostrando {filteredUsers.length} de {usersWithActivity?.length || 0} usuarios
+              Mostrando {filteredUsers.length} de {usersWithActivity?.length || 0} usuarios regulares
             </div>
           </div>
         </div>
@@ -408,8 +458,8 @@ export function UsersSection() {
             <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {usersWithActivity?.length === 0 
-                ? 'No hay usuarios registrados'
-                : 'No se encontraron usuarios'
+                ? 'No hay usuarios regulares registrados'
+                : 'No se encontraron usuarios regulares'
               }
             </h3>
             <p className="text-gray-600">

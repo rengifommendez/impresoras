@@ -52,23 +52,63 @@ export function UserManagement() {
   
   const queryClient = useQueryClient();
 
-  // Query para obtener todos los usuarios
+  // Query para obtener usuarios regulares (excluyendo administradores)
   const { data: users, isLoading: usersLoading } = useQuery({
-    queryKey: ['all-users'],
+    queryKey: ['regular-users-only'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      console.log('🔍 Obteniendo usuarios regulares (excluyendo administradores)...');
+      
+      // Obtener todos los usuarios de la tabla users
+      const { data: allUsers, error } = await supabase
         .from('users')
         .select('*')
         .order('id');
       
-      if (error) throw error;
-      return data as UserData[];
+      if (error) {
+        console.error('Error obteniendo usuarios:', error);
+        throw error;
+      }
+
+      console.log(`👥 Total usuarios en tabla users: ${allUsers?.length || 0}`);
+
+      // Obtener lista de administradores para filtrarlos
+      let adminEmails: string[] = [];
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.access_token) {
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-admin-users`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            }
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            adminEmails = result.users?.map((admin: any) => admin.email) || [];
+            console.log(`🔒 Emails de administradores para filtrar: ${adminEmails.length}`);
+          }
+        }
+      } catch (adminError) {
+        console.warn('No se pudieron obtener administradores para filtrar:', adminError);
+      }
+
+      // Filtrar usuarios que NO sean administradores (por email)
+      const regularUsers = allUsers.filter(user => 
+        !user.email || !adminEmails.includes(user.email)
+      );
+
+      console.log(`👤 Usuarios regulares después del filtro: ${regularUsers?.length || 0}`);
+      
+      return regularUsers as UserData[];
     },
   });
 
-  // Query para estadísticas de usuarios
+  // Query para estadísticas de usuarios regulares
   const { data: userStats } = useQuery({
-    queryKey: ['user-stats'],
+    queryKey: ['regular-user-stats'],
     queryFn: async () => {
       if (!users) return null;
       
@@ -89,7 +129,7 @@ export function UserManagement() {
 
   // Query para obtener oficinas únicas
   const { data: offices } = useQuery({
-    queryKey: ['offices-list'],
+    queryKey: ['offices-list-regular'],
     queryFn: async () => {
       if (!users) return [];
       const uniqueOffices = [...new Set(users.map(u => u.office).filter(Boolean))];
@@ -117,8 +157,8 @@ export function UserManagement() {
       return userData;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-users'] });
-      queryClient.invalidateQueries({ queryKey: ['user-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['regular-users-only'] });
+      queryClient.invalidateQueries({ queryKey: ['regular-user-stats'] });
     }
   });
 
@@ -227,7 +267,7 @@ export function UserManagement() {
               Gestión de Usuarios
             </h2>
             <p className="text-gray-600">
-              Administrar usuarios del sistema y gestionar administradores
+              Administrar usuarios regulares del sistema y gestionar administradores por separado
             </p>
           </div>
         </div>
@@ -239,7 +279,7 @@ export function UserManagement() {
               <div className="flex items-center">
                 <Users className="h-8 w-8 text-blue-600" />
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-blue-600">Total Usuarios</p>
+                  <p className="text-sm font-medium text-blue-600">Usuarios Regulares</p>
                   <p className="text-2xl font-bold text-blue-900">
                     {userStats.total_users}
                   </p>
@@ -395,8 +435,8 @@ export function UserManagement() {
                 <div className="text-sm text-blue-700 space-y-1">
                   <p>• <strong>Los usuarios regulares se crean automáticamente</strong> durante la importación de archivos CSV</p>
                   <p>• <strong>Puedes editar la información</strong> de usuarios existentes (nombre, email, oficina, departamento)</p>
-                  <p>• <strong>Para crear administradores</strong> usa la pestaña "Administradores"</p>
-                  <p>• <strong>Los usuarios aparecen aquí</strong> después de la primera importación de datos</p>
+                  <p>• <strong>Los administradores se gestionan por separado</strong> en la pestaña "Administradores"</p>
+                  <p>• <strong>Esta lista excluye automáticamente</strong> a los usuarios administradores del sistema</p>
                 </div>
               </div>
             </div>
@@ -406,7 +446,7 @@ export function UserManagement() {
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-medium text-gray-900">
-                Lista de Usuarios ({filteredUsers.length})
+                Lista de Usuarios Regulares ({filteredUsers.length})
               </h3>
             </div>
 
@@ -573,7 +613,7 @@ export function UserManagement() {
               <div className="p-6 text-center">
                 <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No se encontraron usuarios
+                  No se encontraron usuarios regulares
                 </h3>
                 <p className="text-gray-600">
                   {users?.length === 0 
