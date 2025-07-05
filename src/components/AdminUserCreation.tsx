@@ -6,8 +6,6 @@ import {
   X, 
   User, 
   Mail, 
-  Building, 
-  Users, 
   Shield,
   AlertCircle,
   CheckCircle,
@@ -21,8 +19,6 @@ interface NewUser {
   id: string;
   email: string;
   full_name: string;
-  office: string;
-  department: string;
   status: 'Normal' | 'Inactive';
   password: string;
   role: 'user' | 'admin';
@@ -43,8 +39,6 @@ export function AdminUserCreation() {
     id: '',
     email: '',
     full_name: '',
-    office: '',
-    department: '',
     status: 'Normal',
     password: '',
     role: 'user'
@@ -97,8 +91,6 @@ export function AdminUserCreation() {
           id: '',
           email: '',
           full_name: '',
-          office: '',
-          department: '',
           status: 'Normal',
           password: '',
           role: 'user'
@@ -107,6 +99,7 @@ export function AdminUserCreation() {
         queryClient.invalidateQueries({ queryKey: ['all-users'] });
         queryClient.invalidateQueries({ queryKey: ['users-with-activity'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       }
     }
   });
@@ -259,7 +252,7 @@ export function AdminUserCreation() {
               </div>
             </div>
 
-            {/* Información Personal */}
+            {/* Información Personal - Solo campos esenciales */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -291,22 +284,6 @@ export function AdminUserCreation() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ID de Usuario
-                </label>
-                <input
-                  type="text"
-                  value={newUser.id}
-                  onChange={(e) => setNewUser(prev => ({ ...prev, id: e.target.value }))}
-                  placeholder="Se genera automáticamente"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Déjalo vacío para generar automáticamente
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Contraseña *
                 </label>
                 <div className="relative">
@@ -331,32 +308,6 @@ export function AdminUserCreation() {
                     )}
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Oficina
-                </label>
-                <input
-                  type="text"
-                  value={newUser.office}
-                  onChange={(e) => setNewUser(prev => ({ ...prev, office: e.target.value }))}
-                  placeholder="Oficina Central"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Departamento
-                </label>
-                <input
-                  type="text"
-                  value={newUser.department}
-                  onChange={(e) => setNewUser(prev => ({ ...prev, department: e.target.value }))}
-                  placeholder="Administración"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
               </div>
 
               <div>
@@ -447,7 +398,6 @@ export function AdminUserCreation() {
             <div className="text-sm text-blue-700 space-y-1">
               <p>• <strong>Usuarios Regulares:</strong> Acceso a dashboard y reportes básicos</p>
               <p>• <strong>Administradores:</strong> Acceso completo incluyendo subida de CSV y gestión</p>
-              <p>• <strong>ID de Usuario:</strong> Se genera automáticamente basado en el nombre</p>
               <p>• <strong>Contraseña:</strong> El usuario puede cambiarla después del primer login</p>
               <p>• <strong>Email:</strong> Se confirma automáticamente, no requiere verificación</p>
             </div>

@@ -9,13 +9,9 @@ import {
   Eye, 
   EyeOff,
   Mail, 
-  Building, 
-  Users,
-  Key,
   AlertCircle,
   CheckCircle,
   Crown,
-  Settings,
   UserCheck,
   Lock
 } from 'lucide-react';
@@ -26,8 +22,6 @@ interface AdminUser {
   id: string;
   email: string;
   full_name?: string;
-  office?: string;
-  department?: string;
   role: string;
   created_at: string;
   last_sign_in_at?: string;
@@ -38,8 +32,6 @@ interface EditingAdmin {
   id: string;
   email: string;
   full_name: string;
-  office: string;
-  department: string;
   newPassword?: string;
   isEditing: boolean;
 }
@@ -113,8 +105,6 @@ export function AdminManagement() {
             userId: adminData.id,
             email: adminData.email,
             full_name: adminData.full_name,
-            office: adminData.office,
-            department: adminData.department,
             newPassword: adminData.newPassword
           })
         });
@@ -164,8 +154,6 @@ export function AdminManagement() {
         id: admin.id,
         email: admin.email,
         full_name: admin.full_name || '',
-        office: admin.office || '',
-        department: admin.department || '',
         newPassword: '',
         isEditing: true
       }
@@ -363,7 +351,7 @@ export function AdminManagement() {
                         
                         {isEditing ? (
                           <div className="space-y-4">
-                            {/* Formulario de edición */}
+                            {/* Formulario de edición simplificado */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -375,6 +363,7 @@ export function AdminManagement() {
                                   onChange={(e) => updateEditingAdmin(admin.id, 'full_name', e.target.value)}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                   placeholder="Nombre completo"
+                                  required
                                 />
                               </div>
                               
@@ -388,32 +377,7 @@ export function AdminManagement() {
                                   onChange={(e) => updateEditingAdmin(admin.id, 'email', e.target.value)}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                   placeholder="email@empresa.com"
-                                />
-                              </div>
-                              
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Oficina
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editingAdmin.office}
-                                  onChange={(e) => updateEditingAdmin(admin.id, 'office', e.target.value)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                  placeholder="Oficina"
-                                />
-                              </div>
-                              
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Departamento
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editingAdmin.department}
-                                  onChange={(e) => updateEditingAdmin(admin.id, 'department', e.target.value)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                  placeholder="Departamento"
+                                  required
                                 />
                               </div>
                               
@@ -504,15 +468,8 @@ export function AdminManagement() {
                               <Mail className="h-4 w-4 mr-2" />
                               {admin.email}
                             </div>
-                            {admin.office && (
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Building className="h-4 w-4 mr-2" />
-                                {admin.office}
-                                {admin.department && ` • ${admin.department}`}
-                              </div>
-                            )}
                             <div className="flex items-center text-sm text-gray-500">
-                              <Settings className="h-4 w-4 mr-2" />
+                              <User className="h-4 w-4 mr-2" />
                               Último acceso: {formatDate(admin.last_sign_in_at)}
                             </div>
                             <div className="flex items-center text-sm text-gray-500">

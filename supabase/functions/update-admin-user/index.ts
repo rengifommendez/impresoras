@@ -11,8 +11,6 @@ interface UpdateAdminRequest {
   userId: string;
   email?: string;
   full_name?: string;
-  office?: string;
-  department?: string;
   newPassword?: string;
 }
 
@@ -140,14 +138,12 @@ serve(async (req) => {
       updatePayload.password = updateData.newPassword
     }
 
-    // Update user metadata
+    // Update user metadata - solo campos esenciales
     const currentMetadata = currentUser.user.user_metadata || {}
     const newMetadata = {
       ...currentMetadata,
       role: 'admin', // Ensure role remains admin
-      full_name: updateData.full_name || currentMetadata.full_name || '',
-      office: updateData.office || currentMetadata.office || '',
-      department: updateData.department || currentMetadata.department || ''
+      full_name: updateData.full_name || currentMetadata.full_name || ''
     }
 
     updatePayload.user_metadata = newMetadata
@@ -182,14 +178,12 @@ serve(async (req) => {
         .limit(1)
 
       if (!localError && localUsers && localUsers.length > 0) {
-        // Update local users table
+        // Update local users table - solo campos esenciales
         await supabaseAdmin
           .from('users')
           .update({
             email: updateData.email || currentUser.user.email,
             full_name: updateData.full_name,
-            office: updateData.office,
-            department: updateData.department,
             updated_at: new Date().toISOString()
           })
           .eq('id', localUsers[0].id)
@@ -213,9 +207,7 @@ serve(async (req) => {
         user: {
           id: updatedUser.user.id,
           email: updatedUser.user.email,
-          full_name: newMetadata.full_name,
-          office: newMetadata.office,
-          department: newMetadata.department
+          full_name: newMetadata.full_name
         }
       }),
       { 
