@@ -15,10 +15,13 @@ import {
   Mail,
   Phone,
   MapPin,
-  UserPlus
+  UserPlus,
+  Shield,
+  Settings
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { AdminUserCreation } from './AdminUserCreation';
+import { AdminManagement } from './AdminManagement';
 
 interface UserData {
   id: string;
@@ -47,7 +50,7 @@ export function UserManagement() {
   const [filterOffice, setFilterOffice] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [editingUsers, setEditingUsers] = useState<{ [key: string]: EditingUser }>({});
-  const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'admins'>('list');
   
   const queryClient = useQueryClient();
 
@@ -200,7 +203,8 @@ export function UserManagement() {
 
   const tabs = [
     { id: 'list', name: 'Lista de Usuarios', icon: Users },
-    { id: 'create', name: 'Crear Usuario', icon: UserPlus }
+    { id: 'create', name: 'Crear Usuario', icon: UserPlus },
+    { id: 'admins', name: 'Administradores', icon: Shield }
   ];
 
   if (usersLoading) {
@@ -315,6 +319,8 @@ export function UserManagement() {
       {/* Contenido de las tabs */}
       {activeTab === 'create' ? (
         <AdminUserCreation />
+      ) : activeTab === 'admins' ? (
+        <AdminManagement />
       ) : (
         <>
           {/* Filtros */}
