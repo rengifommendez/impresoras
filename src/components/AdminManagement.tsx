@@ -13,7 +13,9 @@ import {
   CheckCircle,
   Crown,
   UserCheck,
-  Lock
+  Lock,
+  Plus,
+  UserPlus
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -36,9 +38,21 @@ interface EditingAdmin {
   isEditing: boolean;
 }
 
+interface NewAdmin {
+  email: string;
+  full_name: string;
+  password: string;
+}
+
 interface UpdateResult {
   success: boolean;
   message: string;
+}
+
+interface CreateResult {
+  success: boolean;
+  message: string;
+  userId?: string;
 }
 
 export function AdminManagement() {
@@ -46,6 +60,14 @@ export function AdminManagement() {
   const [editingAdmins, setEditingAdmins] = useState<{ [key: string]: EditingAdmin }>({});
   const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
   const [updateResults, setUpdateResults] = useState<{ [key: string]: UpdateResult }>({});
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [createResult, setCreateResult] = useState<CreateResult | null>(null);
+  const [newAdmin, setNewAdmin] = useState<NewAdmin>({
+    email: '',
+    full_name: '',
+    password: ''
+  });
   
   const queryClient = useQueryClient();
 
@@ -83,6 +105,70 @@ export function AdminManagement() {
       }
     },
     enabled: isAdmin()
+  });
+
+  // Mutation para crear nuevo administrador
+  const createAdminMutation = useMutation({
+    mutationFn: async (adminData: NewAdmin): Promise<CreateResult> => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session?.access_token) {
+          throw new Error('No hay sesión activa');
+        }
+
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: adminData.email,
+            full_name: adminData.full_name,
+            password: adminData.password,
+            role: 'admin',
+            status: 'Normal',
+            office: 'Administración',
+            department: 'IT'
+          })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || `Error HTTP: ${response.status}`);
+        }
+
+        return result;
+
+      } catch (error) {
+        console.error('Error creando admin:', error);
+        return {
+          success: false,
+          message: `Error: ${error instanceof Error ? error.message : 'Error desconocido'}`
+        };
+      }
+    },
+    onSuccess: (result) => {
+      setCreateResult(result);
+      
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+        // Limpiar formulario
+        setNewAdmin({
+          email: '',
+          full_name: '',
+          password: ''
+        });
+        
+        // Limpiar resultado después de 5 segundos
+        setTimeout(() => {
+          setCreateResult(null);
+          setShowCreateForm(false);
+        }, 3000);
+      }
+    }
   });
 
   // Mutation para actualizar usuario administrador
@@ -228,6 +314,29 @@ export function AdminManagement() {
     }));
   };
 
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validaciones
+    if (!newAdmin.email || !newAdmin.full_name || !newAdmin.password) {
+      setCreateResult({
+        success: false,
+        message: 'Todos los campos son obligatorios'
+      });
+      return;
+    }
+
+    if (newAdmin.password.length < 6) {
+      setCreateResult({
+        success: false,
+        message: 'La contraseña debe tener al menos 6 caracteres'
+      });
+      return;
+    }
+
+    await createAdminMutation.mutateAsync(newAdmin);
+  };
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Nunca';
     return new Intl.DateTimeFormat('es-ES', {
@@ -265,14 +374,23 @@ export function AdminManagement() {
               Administrar usuarios con permisos de administrador del sistema
             </p>
           </div>
-          <div className="flex items-center">
-            <Shield className="h-8 w-8 text-purple-600 mr-3" />
-            <div>
-              <p className="text-sm font-medium text-purple-600">Administradores Activos</p>
-              <p className="text-2xl font-bold text-purple-900">
-                {adminUsers?.length || 0}
-              </p>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center">
+              <Shield className="h-8 w-8 text-purple-600 mr-3" />
+              <div>
+                <p className="text-sm font-medium text-purple-600">Administradores Activos</p>
+                <p className="text-2xl font-bold text-purple-900">
+                  {adminUsers?.length || 0}
+                </p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Crear Administrador
+            </button>
           </div>
         </div>
 
@@ -294,6 +412,145 @@ export function AdminManagement() {
           </div>
         </div>
       </div>
+
+      {/* Formulario de Creación de Administrador */}
+      {showCreateForm && (
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-medium text-gray-900">
+              Crear Nuevo Administrador
+            </h3>
+            <button
+              onClick={() => {
+                setShowCreateForm(false);
+                setCreateResult(null);
+                setNewAdmin({ email: '', full_name: '', password: '' });
+              }}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateAdmin} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAdmin.full_name}
+                  onChange={(e) => setNewAdmin(prev => ({ ...prev, full_name: e.target.value }))}
+                  placeholder="Juan Pérez García"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Correo Electrónico *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newAdmin.email}
+                  onChange={(e) => setNewAdmin(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="admin@sedcauca.gov.co"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contraseña *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCreatePassword ? 'text' : 'password'}
+                    required
+                    value={newAdmin.password}
+                    onChange={(e) => setNewAdmin(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Mínimo 6 caracteres"
+                    minLength={6}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={() => setShowCreatePassword(!showCreatePassword)}
+                  >
+                    {showCreatePassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  La contraseña debe tener al menos 6 caracteres.
+                </p>
+              </div>
+            </div>
+
+            {/* Resultado de creación */}
+            {createResult && (
+              <div className={`p-3 rounded-lg border ${
+                createResult.success 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <div className="flex items-start">
+                  {createResult.success ? (
+                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 mr-2 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
+                  )}
+                  <p className={`text-sm ${
+                    createResult.success ? 'text-green-700' : 'text-red-700'
+                  }`}>
+                    {createResult.message}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Botones de acción */}
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setCreateResult(null);
+                  setNewAdmin({ email: '', full_name: '', password: '' });
+                }}
+                disabled={createAdminMutation.isPending}
+                className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={createAdminMutation.isPending}
+                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {createAdminMutation.isPending ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                    Creando...
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Administrador
+                  </div>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Lista de Administradores */}
       <div className="bg-white rounded-lg shadow-sm border">
